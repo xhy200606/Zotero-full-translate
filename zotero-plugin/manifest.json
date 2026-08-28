@@ -1,0 +1,18 @@
+{
+  "manifest_version": 2,
+  "name": "Zotero-full-translate",
+  "version": "0.2.22",
+  "description": "Zotero 10 全文 PDF 翻译插件：连接 Zotero-full-translate Cloud，支持云端翻译、译文附件、左右对照、同步滚动和强制重译。",
+  "author": "Zotero-full-translate contributors",
+  "icons": {
+    "48": "chrome/content/icons/icon-48.png",
+    "96": "chrome/content/icons/icon-96.png"
+  },
+  "applications": {
+    "zotero": {
+      "id": "zotero-fulltext-translator@zft.local",
+      "strict_min_version": "9.0",
+      "strict_max_version": "10.*"
+    }
+  }
+}

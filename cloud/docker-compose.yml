@@ -1,0 +1,30 @@
+services:
+  zft:
+    build:
+      context: .
+      args:
+        VITE_API_BASE_URL: ""
+    image: zotero-full-translate-cloud:1.4.1
+    container_name: zotero-full-translate-cloud
+    restart: unless-stopped
+    env_file: .env
+    # Force the single-container persistence backends even if an old v1.1 .env
+    # still contains PostgreSQL/Redis/MinIO variables.
+    environment:
+      DATABASE_URL: sqlite:////data/zft.db
+      ZFT_STORAGE_DIR: /data/files
+      ZFT_WORK_DIR: /data/work
+      ZFT_STATIC_DIR: /app/static
+    ports:
+      - "${ZFT_PORT:-3005}:8089"
+    volumes:
+      - zft_data:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8089/health', timeout=3).read()"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+volumes:
+  zft_data:

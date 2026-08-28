@@ -1,0 +1,11 @@
+fastapi==0.116.1
+uvicorn[standard]==0.35.0
+pydantic-settings==2.10.1
+SQLAlchemy==2.0.43
+python-multipart==0.0.20
+httpx==0.28.1
+openai==1.101.0
+psutil==7.0.0
+packaging==25.0
+# BabelDOC requires cryptography>=46.0.7; do not pin an older cryptography version here.
+babeldoc @ git+https://github.com/funstory-ai/BabelDOC.git@38d3896dcde9b5a940c62cf5563cadea673a64d3
