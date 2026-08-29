@@ -76,7 +76,8 @@ class TranslationMemory:
         return value
 
     def put(self, text: str, translated: str, lang_in: str, lang_out: str,
-            provider_id: str | None = None, profile_key: str = PROFILE_KEY) -> None:
+            provider_id: str | None = None, profile_key: str = PROFILE_KEY,
+            replace: bool = False) -> None:
         normalized = normalize_source(text)
         translated = str(translated or "").strip()
         if not normalized or not translated:
@@ -102,11 +103,12 @@ class TranslationMemory:
                 )
                 db.add(row)
             else:
-                # Preserve the first successful translation by default. This avoids
-                # different providers constantly replacing a stable cached wording.
-                if not row.translated_text:
+                                                                                 
+                                                                                   
+                                                                        
+                if replace or not row.translated_text:
                     row.translated_text = translated
-                if not row.provider_id:
+                if replace or not row.provider_id:
                     row.provider_id = provider_id
                 row.last_used_at = _now()
             try:

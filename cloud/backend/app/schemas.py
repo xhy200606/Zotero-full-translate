@@ -25,8 +25,14 @@ class JobOut(BaseModel):
     client_item_key: str | None = None
     worker_name: str | None = None
     source_sha256: str | None = None
-    reused_from_job_id: str | None = None
+    document_doi: str | None = None
     reuse_count: int = 0
+    source_bytes: int = 0
+    result_bytes: int = 0
+    cache_hit: bool = False
+    user_id: str | None = None
+    device_id: str | None = None
+    api_key_id: str | None = None
     error_code: str | None
     error_message: str | None
     metrics: dict
@@ -35,6 +41,8 @@ class JobOut(BaseModel):
     finished_at: datetime | None
     has_mono: bool = False
     has_dual: bool = False
+    mono_sha256: str | None = None
+    dual_sha256: str | None = None
 
 
 class JobList(BaseModel):
@@ -109,7 +117,14 @@ class ProviderOut(BaseModel):
     kind: str
     display_name: str
     enabled: bool
+    custom: bool = False
     configured: bool
+    template_id: str | None = None
+    vendor: str | None = None
+    logo: str | None = None
+    description: str = ""
+    credential_url: str | None = None
+    docs_url: str | None = None
     config: dict[str, Any]
     secret_fields: dict[str, bool]
     last_test_ok: bool | None = None
@@ -125,6 +140,35 @@ class ProviderUpdate(BaseModel):
     enabled: bool | None = None
     config: dict[str, Any] | None = None
     secrets: dict[str, str | None] | None = None
+
+
+class ProviderCreateRequest(BaseModel):
+    template_id: str | None = Field(default=None, min_length=2, max_length=60)
+    kind: str | None = Field(default=None, min_length=2, max_length=40)
+    display_name: str | None = Field(default=None, min_length=1, max_length=120)
+
+
+class ProviderCatalogItem(BaseModel):
+    template_id: str
+    kind: str
+    vendor: str
+    logo: str
+    display_name: str
+    description: str
+    credential_url: str | None = None
+    docs_url: str | None = None
+
+
+class UserTranslationSettingsOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    default_provider_ids: list[str] = Field(default_factory=list)
+    default_provider_strategy: str = "balanced"
+    updated_at: datetime
+
+
+class UserTranslationSettingsUpdate(BaseModel):
+    default_provider_ids: list[str] = Field(default_factory=list)
+    default_provider_strategy: str = "balanced"
 
 
 class ProviderTestOut(BaseModel):
@@ -145,11 +189,15 @@ class WorkerOut(BaseModel):
 
 
 class JobReuseLookupRequest(BaseModel):
-    source_sha256: str = Field(min_length=64, max_length=64)
+    document_doi: str = Field(min_length=3, max_length=255)
     lang_in: str = "en"
     lang_out: str = "zh-CN"
     pages: str | None = None
     output_mode: str = "mono"
+    filename: str | None = Field(default=None, max_length=512)
+    client_id: str | None = Field(default=None, max_length=128)
+    client_request_id: str | None = Field(default=None, max_length=160)
+    client_item_key: str | None = Field(default=None, max_length=160)
 
 
 class JobReuseLookup(BaseModel):
@@ -165,3 +213,209 @@ class TranslationMemoryStats(BaseModel):
     process_hits: int = 0
     process_misses: int = 0
     process_writes: int = 0
+
+
+class UserPublic(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    username: str
+    email: str | None = None
+    display_name: str | None = None
+    role: str
+    is_active: bool
+    created_at: datetime
+    last_login_at: datetime | None = None
+
+
+class DeviceOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    device_code: str
+    name: str
+    platform: str | None = None
+    app_version: str | None = None
+    revoked: bool
+    created_at: datetime
+    last_seen_at: datetime
+    current: bool = False
+
+
+class DeviceUpdateRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=180)
+
+
+class ClientApiKeyCreateRequest(BaseModel):
+    label: str | None = Field(default=None, max_length=120)
+    scopes: list[str] = Field(default_factory=lambda: ["translate", "lookup", "download", "account:read"])
+    expires_in_days: int | None = Field(default=None, ge=1, le=3650)
+
+
+class ClientApiKeyRotateRequest(BaseModel):
+    expires_in_days: int | None = Field(default=None, ge=1, le=3650)
+
+
+class ClientApiKeyOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    key_prefix: str
+    label: str | None = None
+    scopes: list[str] = Field(default_factory=list)
+    expires_at: datetime | None = None
+    rotated_from_id: str | None = None
+    created_at: datetime
+    last_used_at: datetime | None = None
+    revoked_at: datetime | None = None
+
+
+class ClientApiKeyCreatedOut(ClientApiKeyOut):
+    api_key: str
+
+
+class AuthCapabilities(BaseModel):
+    registration_enabled: bool = False
+    setup_required: bool = False
+    first_registered_user_is_admin: bool = True
+    token_ttl_days: int = 180
+    device_authentication: bool = True
+    shared_translation_cache: bool = True
+    client_api_keys: bool = True
+    account_document_lock: bool = True
+
+
+class LoginRequest(BaseModel):
+    username: str = Field(min_length=1, max_length=80)
+    password: str = Field(min_length=1, max_length=512)
+    device_code: str = Field(min_length=4, max_length=160)
+    device_name: str = Field(default="Browser", min_length=1, max_length=180)
+    platform: str | None = Field(default=None, max_length=80)
+    app_version: str | None = Field(default=None, max_length=48)
+
+
+class RegisterRequest(BaseModel):
+    username: str = Field(min_length=3, max_length=80)
+    password: str = Field(min_length=8, max_length=512)
+    email: str | None = Field(default=None, max_length=255)
+    display_name: str | None = Field(default=None, max_length=120)
+    device_code: str = Field(min_length=4, max_length=160)
+    device_name: str = Field(default="Browser", min_length=1, max_length=180)
+    platform: str | None = Field(default=None, max_length=80)
+    app_version: str | None = Field(default=None, max_length=48)
+
+
+class AuthSessionOut(BaseModel):
+    expires_at: datetime
+    user: UserPublic
+    device: DeviceOut
+
+
+class ClientAuthOut(BaseModel):
+    user: UserPublic
+    api_key_id: str
+    key_prefix: str
+    scopes: list[str] = Field(default_factory=list)
+    expires_at: datetime | None = None
+    device: DeviceOut | None = None
+
+
+class BootstrapAdminRequest(BaseModel):
+    username: str = Field(default="admin", min_length=3, max_length=80)
+    password: str = Field(min_length=8, max_length=512)
+    email: str | None = Field(default=None, max_length=255)
+    display_name: str | None = Field(default="Administrator", max_length=120)
+
+
+class PasswordChangeRequest(BaseModel):
+    current_password: str = Field(min_length=1, max_length=512)
+    new_password: str = Field(min_length=8, max_length=512)
+
+
+class AdminCreateUserRequest(BaseModel):
+    username: str = Field(min_length=3, max_length=80)
+    password: str = Field(min_length=8, max_length=512)
+    email: str | None = Field(default=None, max_length=255)
+    display_name: str | None = Field(default=None, max_length=120)
+    role: str = "user"
+    is_active: bool = True
+
+
+class AdminUpdateUserRequest(BaseModel):
+    email: str | None = Field(default=None, max_length=255)
+    display_name: str | None = Field(default=None, max_length=120)
+    role: str | None = None
+    is_active: bool | None = None
+    password: str | None = Field(default=None, min_length=8, max_length=512)
+
+
+class UsageSummary(BaseModel):
+    date: str
+    calls: int = 0
+    request_bytes: int = 0
+    response_bytes: int = 0
+    total_bytes: int = 0
+    cache_hits: int = 0
+    translated_jobs: int = 0
+    completed_jobs: int = 0
+    failed_jobs: int = 0
+
+
+class AccountSummary(BaseModel):
+    user: UserPublic
+    today: UsageSummary
+    total_jobs: int = 0
+    total_cache_hits: int = 0
+    device_count: int = 0
+    api_key_count: int = 0
+    recent_jobs: list[JobOut] = Field(default_factory=list)
+
+
+class AdminUserRow(BaseModel):
+    user: UserPublic
+    device_count: int = 0
+    api_key_count: int = 0
+    today_calls: int = 0
+    today_request_bytes: int = 0
+    today_response_bytes: int = 0
+    today_bytes: int = 0
+    today_cache_hits: int = 0
+    total_jobs: int = 0
+    total_cache_hits: int = 0
+
+
+class AdminSummary(BaseModel):
+    date: str
+    total_users: int = 0
+    new_users_today: int = 0
+    active_users_today: int = 0
+    active_devices_24h: int = 0
+    active_api_keys: int = 0
+    today_calls: int = 0
+    today_request_bytes: int = 0
+    today_response_bytes: int = 0
+    today_bytes: int = 0
+    today_cache_hits: int = 0
+    today_jobs: int = 0
+    today_completed: int = 0
+    today_failed: int = 0
+    all_completed_jobs: int = 0
+    shared_cache_reuse_total: int = 0
+
+
+class DailyUsagePoint(BaseModel):
+    date: str
+    calls: int = 0
+    bytes: int = 0
+    cache_hits: int = 0
+    jobs: int = 0
+
+
+class AdminUserDetail(BaseModel):
+    user: UserPublic
+    today: UsageSummary
+    device_count: int = 0
+    api_key_count: int = 0
+    total_jobs: int = 0
+    total_cache_hits: int = 0
+    devices: list[DeviceOut] = Field(default_factory=list)
+    recent_jobs: list[JobOut] = Field(default_factory=list)
+    usage: list[DailyUsagePoint] = Field(default_factory=list)
+

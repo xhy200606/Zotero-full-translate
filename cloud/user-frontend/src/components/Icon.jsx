@@ -21,6 +21,9 @@ const paths = {
   warning: 'M12 3 2.5 20h19L12 3Zm0 4 6.1 11H5.9L12 7Zm-1 3v4h2v-4h-2Zm0 5.5v2h2v-2h-2Z',
   info: 'M11 10h2v7h-2v-7Zm0-3h2v2h-2V7Zm1-4a9 9 0 1 0 0 18 9 9 0 0 0 0-18Zm0 2a7 7 0 1 1 0 14 7 7 0 0 1 0-14Z',
   more: 'M6 10a2 2 0 1 0 0 4 2 2 0 0 0 0-4Zm6 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4Zm6 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4Z',
+  plus: 'M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6V5Z',
+  external: 'M14 4h6v6h-2V7.4l-7.3 7.3-1.4-1.4L16.6 6H14V4ZM5 6h6v2H7v9h9v-4h2v6H5V6Z',
+  devices: 'M4 5h14v10H4V5Zm2 2v6h10V7H6Zm13 2h2v10h-8v-2h6V9ZM8 17h5v2H8v-2Z',
 }
 
 export default function Icon({name, size=24, className=''}){

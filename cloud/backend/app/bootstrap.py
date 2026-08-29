@@ -63,8 +63,8 @@ def ensure_runtime_defaults() -> None:
         baidu = db.get(ProviderProfile, "baidu")
         if baidu is not None:
             cfg = dict(baidu.config or {})
-            # v1.3 shipped Baidu at 1 QPS. Raise only that legacy/default value;
-            # preserve explicit user tuning above 1 QPS.
+                                                                                
+                                                        
             if float(cfg.get("qps") or 1) <= 1.0:
                 cfg["qps"] = 10
             if int(cfg.get("max_concurrency") or 1) <= 1:
@@ -78,8 +78,8 @@ def ensure_runtime_defaults() -> None:
 
         tencent = db.get(ProviderProfile, "tencent")
         if tencent is None:
-            # Prefer the user's Tencent Machine Translation (TMT) entitlement when
-            # SecretId/SecretKey are supplied. TokenHub remains an explicit option.
+                                                                                  
+                                                                                   
             initial_mode = "tokenhub" if s.tencent_tokenhub_api_key and not (s.tencent_secret_id and s.tencent_secret_key) else "tmt_tc3"
             db.add(ProviderProfile(
                 id="tencent", kind="tencent", display_name="腾讯机器翻译 TMT",
@@ -106,9 +106,9 @@ def ensure_runtime_defaults() -> None:
                 }),
             ))
         else:
-            # v1.3.0 used legacy_tc3 to mean Hunyuan. That caused TMT users to
-            # receive FailedOperation.ServiceNotActivated. Migrate only that old
-            # compatibility value; explicit TokenHub settings are left untouched.
+                                                                              
+                                                                                
+                                                                                 
             cfg = dict(tencent.config or {})
             mode = str(cfg.get("auth_mode") or "").lower()
             if mode == "legacy_tc3":
@@ -146,8 +146,8 @@ def ensure_runtime_defaults() -> None:
             ))
         else:
             cfg = dict(volcengine.config or {})
-            # v1.4.1 switches Volcengine to the API-key based Machine Translation endpoint.
-            # Remove stale TC3/OpenAPI routing values so the Web UI exposes only the active API.
+                                                                             
+                                                                                                
             for key in ("api_mode", "region", "service", "version", "legacy_endpoint", "legacy_region", "legacy_version"):
                 cfg.pop(key, None)
             cfg["endpoint"] = "https://openspeech.bytedance.com/api/v3/machine_translation/matx_translate"
@@ -162,14 +162,14 @@ def ensure_runtime_defaults() -> None:
             cfg.setdefault("quota_low_percent", 10)
             cfg.setdefault("quota_period", "month")
             volcengine.config = cfg
-            # Old AK/SK values are left encrypted for rollback, but only api_key is used from v1.4.1 onward.
+                                                                                                                    
             secrets = decrypt_json(volcengine.secret_payload)
             if s.volc_api_key and not secrets.get("api_key"):
                 secrets["api_key"] = s.volc_api_key
                 volcengine.secret_payload = _secret(secrets)
             if not secrets.get("api_key"):
-                # A v1.4.0 profile may still be marked enabled with only obsolete AK/SK.
-                # Disable it until the new API Key is saved so default multi-engine jobs remain runnable.
+                                                                                        
+                                                                                                         
                 volcengine.enabled = False
 
         if db.get(ProviderProfile, "aliyun") is None:
@@ -203,9 +203,9 @@ def ensure_runtime_defaults() -> None:
             cfg.setdefault("quota_period", "month")
             openai_profile.config = cfg
 
-        # Keep a fresh/updated server usable even when the configured legacy default
-        # provider has no credentials. Do not silently enable anything; just select
-        # among providers that are already enabled.
+                                                                                    
+                                                                                   
+                                                   
         db.flush()
         enabled_rows = db.query(ProviderProfile).filter(ProviderProfile.enabled.is_(True)).order_by(ProviderProfile.id.asc()).all()
         enabled_ids = [x.id for x in enabled_rows]

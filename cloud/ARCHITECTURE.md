@@ -1,111 +1,155 @@
-# Zotero-full-translate Cloud 架构
-
-## 单容器控制平面
+# Cloud 2.3 Architecture
 
 ```text
-┌───────────────────────────────────────────────────────────────┐
-│ Zotero-full-translate Cloud container                                           │
-│                                                               │
-│ React / Material 3                                            │
-│        │                                                      │
-│     FastAPI ─── SQLite ─── /data files                       │
-│        │          │                                           │
-│        │          ├─ Jobs / Events                            │
-│        │          ├─ Provider quota state                     │
-│        │          └─ ZFT Translation Memory                   │
-│        │                                                      │
-│ Embedded Task Manager                                         │
-│        │                                                      │
-│     BabelDOC                                                  │
-│        │                                                      │
-│ MultiProviderTranslator                                       │
-│   ├─ Baidu 10 QPS default                                     │
-│   ├─ Tencent 5 QPS default                                    │
-│   ├─ Volcengine 10 QPS default                                │
-│   ├─ Aliyun 10 QPS default                                    │
-│   └─ OpenAI-compatible                                        │
-└───────────────────────────────────────────────────────────────┘
+Browser ─ :3005 用户中心 ─┐
+                           ├─ FastAPI ─ SQLite/WAL ─ /data
+Browser ─ :3006 管理后台 ─┤        │
+                           │        ├─ Account / API Keys / Usage
+Zotero ── :3005 API ──────┘        ├─ DOI Binding / TranslationVersion
+                                    ├─ Result Assets / TM
+                                    └─ BabelDOC + 用户 Provider
 ```
 
-## 文档级复用
+3005/3006 只是入口职责不同，API 权限始终由服务端 principal/role/scope 判断。
 
-客户端先计算 PDF SHA-256：
+## 身份层
 
 ```text
-PDF -> SHA-256 -> /api/v1/jobs/lookup
-                    ├─ hit  -> 直接返回历史完成 Job / PDF
-                    └─ miss -> 上传 PDF -> 创建新 Job
+User
+├─ password_hash (scrypt)
+├─ Web AuthToken
+├─ ClientApiKey (zftk_...)
+│  ├─ scopes
+│  ├─ expires_at
+│  └─ rotated_from_id
+└─ Device UUID(s)
 ```
 
-服务端上传入口还会再次做 SHA-256 复用检查，因此旧客户端也能避免重复 BabelDOC 翻译，只是无法节省上传流量。
+Web Session 与 Zotero API Key 分离。浏览器通过 HttpOnly Cookie 携带 Web session；Zotero 使用 bearer client key。服务端只保存 token/key 的 SHA-256，不保存普通长期明文。
 
-## 文本级 Translation Memory
+Device UUID 只描述安装实例，不参与文献身份。
 
-BabelDOC 进入翻译阶段后：
+## DOI 文献层
+
+源 PDF 不再做 hash identity。规范化 DOI 是文献键：
 
 ```text
-stable paragraph
-      │
-      ▼
-ZFT Translation Memory
-  ├─ hit  -> 直接返回第一次成功译文
-  └─ miss -> Quota-aware MultiProviderTranslator
-                │
-                └─ 成功后写入 TM
+Job
+  document_doi
+  lang_in/lang_out/pages/output_mode
+        │
+        ├─ completed result assets
+        │    mono_sha256 / dual_sha256
+        │
+        └─ TranslationVersion (immutable)
+                  │
+                  └─ UserDocumentBinding.current_version_id
 ```
 
-ZFT TM 独立于具体 Provider，因此相同语言对/profile 的相同文本可以跨百度/腾讯/火山/阿里复用。BabelDOC 自身的内部 cache 仍保留，形成额外缓存层。
+`UserDocumentBinding` 按账户 + DOI + 翻译参数唯一定位当前版本。
 
-## 额度感知调度
+没有 DOI 的 Job 可以存在，但没有 DOI binding。
 
-每个 Provider 持久保存：
+### DOI-only 的边界
+
+DOI 是元数据，不能证明 PDF 文件内容。跨账户裸 lookup 不暴露其他账户私有 Job，但客户端提交带 DOI 的请求时，全局缓存可按 DOI 复用。错误 DOI 可能造成错误配对，因此这不是 proof-of-possession 设计。
+
+## 原子版本切换
+
+正常完成/缓存克隆/重译成功的关键事务：
 
 ```text
-local_used_chars
-remote_used_chars (若有可用同步来源)
-status
-last_error
-configured total/reserve/low threshold
+BEGIN
+  Job.status = COMPLETED
+  Job.result keys / translated-result SHA-256
+  INSERT TranslationVersion
+  UPSERT UserDocumentBinding.current_version_id
+COMMIT
 ```
 
-调度权重近似：
+如果任何一步失败则 rollback，旧 binding 继续有效。这样设备 A/B 永远从同一个账户 current pointer 解析版本。
+
+## 本地/第三方同步路径
 
 ```text
-capacity = qps × quota_dispatch_weight
-score    = (in_flight + 1) / capacity
+Zotero 打开原文
+  ↓
+读取父条目 DOI
+  ↓
+Cloud lookup current binding
+  ↓
+拿到当前译文 result SHA-256
+  ↓
+检查 Zotero 已有附件/原文同目录候选
+  ↓
+path+size+mtime hash index 命中？
+  ↓ 否时才计算 SHA-256
+结果 hash 完全一致 → 直接绑定
+否则 → Cloud 下载
 ```
 
-`exhausted` / `unavailable` Provider 不进入候选池。低额度 Provider 仍可用，但权重会下降。
+源文献不计算 SHA-256；只有译文结果用 SHA-256 做字节级版本确认。
 
-必须区分“官方余额”和“ZFT 估算”：不是所有云翻译产品都提供统一的剩余字符查询 API。v1.4 的 API 明确返回 `source`；如果只有用户配置的总额度 + ZFT 本地计量，则标记为 `manual_budget+local_meter`。
-
-## 两层限速
-
-1. BabelDOC aggregate limiter：控制整篇文档的总请求启动速率。
-2. Provider gate：每个服务独立 QPS + concurrency semaphore。
-
-多引擎理论吞吐量接近健康 Provider 的有效 QPS 之和，同时受 `aggregate_qps_cap`、`multi_pool_max_workers`、网络延迟、段落数量和厂商账号限制约束。
-
-## Provider 熔断
+## Provider 隔离
 
 ```text
-Baidu 54004                  -> exhausted
-Volcengine unsynchronized    -> unavailable
-Tencent ServiceNotActivated  -> unavailable
-Auth/signature failures      -> unavailable
+User
+└─ UserProviderProfile(s)
+   ├─ built-in profile
+   ├─ custom profile
+   ├─ encrypted config/secrets
+   └─ default pool: single / balanced / failover
 ```
 
-硬错误会立即交还给 MultiProviderTranslator，并转投其他健康 Provider；不会让同一段落在明确的账户错误上持续指数重试。
+只有真正需要新翻译时才加载 Job 所属用户的 Provider。缓存复用路径在 Provider 配置检查之前执行。
 
-## 数据持久化
+## SQLite
 
-单 volume：`zft_data:/data`
+单节点默认 SQLite。连接 PRAGMA：
 
 ```text
-/data/zft.db
-/data/files/inputs/
-/data/files/results/
-/data/work/
+foreign_keys=ON
+journal_mode=WAL
+busy_timeout=30000
+synchronous=NORMAL
 ```
 
-普通升级和 `scripts/rebuild-zft.sh` 默认保留该 volume。只有 `--reset-data` 会在明确二次确认后删除 ZFT 持久数据。
+任务状态更新保持短事务；高频查询索引覆盖用户、DOI、Job 时间/状态和 Usage 时间。
+
+Schema 变更通过 Alembic。`Base.metadata.create_all()` 负责新库基础表，Alembic revision 负责正式版本迁移和旧库演进；legacy column bridge 只用于历史数据库过渡。
+
+## 升级路径
+
+`cloud/scripts/update.sh` 根据文件哈希决定：
+
+```text
+backend/app / alembic only
+→ SQLite backup
+→ restart
+
+requirements / frontend / Dockerfile / compose changed
+→ SQLite backup
+→ cached build
+→ recreate
+```
+
+Alembic 和 `alembic.ini` 以只读 bind mount 进入容器，因此 migration-only 更新不要求重新下载整个 runtime 依赖。
+
+## Zotero 状态机
+
+```text
+IDLE
+ ↓
+RESOLVING
+ ├─ LOCAL_MATCH → SWITCHING → BOUND
+ └─ UPLOADING / TRANSLATING / RETRANSLATING
+                    ↓
+                DOWNLOADING
+                    ↓
+                SWITCHING
+                    ↓
+                  BOUND
+任何失败 → ERROR → 保留既有可用绑定/附件
+```
+
+状态机用于限制错误顺序，特别是重译期间不得提前删除旧译本。

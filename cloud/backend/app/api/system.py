@@ -7,13 +7,12 @@ from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from .. import __version__
-from ..auth import require_api_key
+from ..auth import require_admin
 from ..config import get_settings
 from ..db import get_db
-from ..models import Job, ProviderProfile, RuntimeConfig
+from ..models import Job, RuntimeConfig, UserProviderProfile
 from ..schemas import RuntimeOut, RuntimeUpdate, SystemStatus, WorkerOut
 from ..services.rate_limit import gate
-from ..services.providers import provider_is_configured
 from ..storage import ensure_bucket
 from ..task_manager import manager
 
@@ -28,16 +27,28 @@ def _runtime(db: Session) -> RuntimeConfig:
 
 
 def _providers_with_metrics(db: Session, qps: int) -> list[dict]:
-    rows = db.query(ProviderProfile).order_by(ProviderProfile.id.asc()).all()
-    result = []
-    for x in rows:
-        try: provider_qps = float((x.config or {}).get("qps") or qps)
-        except Exception: provider_qps = float(qps)
-        result.append(gate.snapshot(x.id, provider_qps) | {"enabled": x.enabled, "display_name": x.display_name})
-    return result
+                                                                                 
+    rows = db.query(UserProviderProfile).all()
+    buckets: dict[str, dict] = {}
+    for row in rows:
+        item = buckets.setdefault(row.provider_id, {
+            "provider": row.provider_id,
+            "display_name": row.display_name,
+            "configured_accounts": 0,
+            "enabled_accounts": 0,
+        })
+        if row.enabled:
+            item["enabled_accounts"] += 1
+        try:
+            from ..services.providers import provider_is_configured
+            if provider_is_configured(row):
+                item["configured_accounts"] += 1
+        except Exception:
+            pass
+    return list(sorted(buckets.values(), key=lambda x: x["provider"]))
 
 
-@router.get("/status", response_model=SystemStatus, dependencies=[Depends(require_api_key)])
+@router.get("/status", response_model=SystemStatus, dependencies=[Depends(require_admin)])
 def system_status(db: Session = Depends(get_db)):
     runtime = _runtime(db)
     db_ok = storage_ok = False
@@ -64,9 +75,9 @@ def system_status(db: Session = Depends(get_db)):
         ok=db_ok and storage_ok,
         version=__version__,
         database=db_ok,
-        redis=True,  # compatibility field: embedded queue is healthy while the process is alive
+        redis=True,                                                                             
         storage=storage_ok,
-        translator_provider=runtime.default_provider,
+        translator_provider="per-user",
         queue_depth=snap["queued"],
         active_jobs=active,
         queued_jobs=queued,
@@ -78,8 +89,6 @@ def system_status(db: Session = Depends(get_db)):
             "queue": "embedded",
             "storage": "local-volume",
             "max_active_jobs": runtime.max_active_jobs,
-            "default_provider_ids": list(getattr(runtime, "default_provider_ids", None) or [runtime.default_provider]),
-            "default_provider_strategy": str(getattr(runtime, "default_provider_strategy", None) or "balanced"),
             "babeldoc_qps": runtime.babeldoc_qps,
             "pool_max_workers": runtime.pool_max_workers,
             "multi_pool_max_workers": getattr(runtime, "multi_pool_max_workers", 12),
@@ -91,12 +100,12 @@ def system_status(db: Session = Depends(get_db)):
     )
 
 
-@router.get("/runtime", response_model=RuntimeOut, dependencies=[Depends(require_api_key)])
+@router.get("/runtime", response_model=RuntimeOut, dependencies=[Depends(require_admin)])
 def runtime_config(db: Session = Depends(get_db)):
     return _runtime(db)
 
 
-@router.put("/runtime", response_model=RuntimeOut, dependencies=[Depends(require_api_key)])
+@router.put("/runtime", response_model=RuntimeOut, dependencies=[Depends(require_admin)])
 def update_runtime(payload: RuntimeUpdate, db: Session = Depends(get_db)):
     row = _runtime(db)
     values = payload.model_dump(exclude_none=True)
@@ -132,7 +141,7 @@ def update_runtime(payload: RuntimeUpdate, db: Session = Depends(get_db)):
     return row
 
 
-@router.get("/workers", response_model=list[WorkerOut], dependencies=[Depends(require_api_key)])
+@router.get("/workers", response_model=list[WorkerOut], dependencies=[Depends(require_admin)])
 def workers():
     snap = manager.snapshot()
     return [WorkerOut(

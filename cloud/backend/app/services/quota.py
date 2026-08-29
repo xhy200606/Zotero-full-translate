@@ -242,7 +242,7 @@ class QuotaManager:
         with self.lock:
             state.local_used_chars += chars
             state.dirty_chars += chars
-            # A real successful translation is the strongest recovery signal.
+                                                                             
             if state.status in {"unavailable", "exhausted", "warning"}:
                 state.status = "ok" if quota_config(config)["total_chars"] else "metered"
                 state.last_error = None

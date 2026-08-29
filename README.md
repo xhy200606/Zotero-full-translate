@@ -63,6 +63,3 @@ Zotero 中进入“工具 → 插件 → 齿轮 → 从文件安装插件”，�
 
 详见各组件内的 `LICENSE` 和根目录 `LICENSE.md`。第三方依赖仍受各自许可证约束。
 
-## 引用
-
-学术或软件引用见 `CITATION.cff` 与 `CITATION.md`。上传 GitHub 后，可将其中的仓库 URL 占位符替换为实际地址。

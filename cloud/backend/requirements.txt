@@ -9,3 +9,5 @@ psutil==7.0.0
 packaging==25.0
 # BabelDOC requires cryptography>=46.0.7; do not pin an older cryptography version here.
 babeldoc @ git+https://github.com/funstory-ai/BabelDOC.git@38d3896dcde9b5a940c62cf5563cadea673a64d3
+
+alembic==1.14.1

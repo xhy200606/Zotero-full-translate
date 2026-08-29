@@ -31,13 +31,13 @@ class GlobalRateGate:
         max_concurrency = max(1, int(max_concurrency))
         started = time.monotonic()
 
-        # Reserve a concurrency slot first.
+                                           
         with self.cond:
             while self.active[provider] >= max_concurrency:
                 self.cond.wait(timeout=0.25)
             self.active[provider] += 1
 
-        # Smooth request starts with a leaky-bucket interval.
+                                                             
         try:
             with self.lock:
                 now = time.monotonic()

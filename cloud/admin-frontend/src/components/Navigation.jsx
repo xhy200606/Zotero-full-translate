@@ -1,0 +1,5 @@
+import Icon from './Icon'
+import BrandLogo from './BrandLogo'
+const items=[['overview','dashboard','统计总览'],['users','users','用户管理'],['settings','settings','后台设置']]
+function NavItem({item,current,onChange}){const [id,icon,label]=item;return <button className={`nav-item ${current===id?'active':''}`} onClick={()=>onChange(id)} aria-current={current===id?'page':undefined}><span className="nav-indicator"><Icon name={icon}/></span><span className="nav-label">{label}</span></button>}
+export default function Navigation({view,onChange}){return <><aside className="md-nav-drawer"><div className="brand-block"><BrandLogo/><div><strong>Zotero-full-translate</strong><span>Admin Console</span></div></div><nav>{items.map(x=><NavItem key={x[0]} item={x} current={view} onChange={onChange}/>)}</nav><div className="drawer-footer"><span>用户与运营统计</span><small>Cloud 2.5.0</small></div></aside><aside className="md-nav-rail"><BrandLogo compact/><nav>{items.map(x=><NavItem key={x[0]} item={x} current={view} onChange={onChange}/>)}</nav></aside><nav className="md-nav-bar">{items.map(x=><NavItem key={x[0]} item={x} current={view} onChange={onChange}/>)}</nav></>}

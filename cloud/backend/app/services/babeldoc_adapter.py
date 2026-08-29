@@ -57,21 +57,24 @@ async def run_babeldoc(
     provider_ids: list[str],
     provider_strategy: str,
     runtime: RuntimeSnapshot,
+    user_id: str | None,
     progress_cb,
     disable_split: bool = False,
+    ignore_cache: bool = False,
 ):
     output_dir.mkdir(parents=True, exist_ok=True)
     translator, provider_qps_sum, provider_concurrency_sum = create_multi_translator(
-        provider_ids, lang_in, lang_out, strategy=provider_strategy, quota_aware=runtime.quota_aware_dispatch
+        provider_ids, lang_in, lang_out, strategy=provider_strategy,
+        quota_aware=runtime.quota_aware_dispatch, ignore_cache=ignore_cache, user_id=user_id
     )
     multi = len(provider_ids) > 1
     qps = max(1, min(runtime.aggregate_qps_cap, int(round(provider_qps_sum))))
     worker_cap = runtime.multi_pool_max_workers if multi else runtime.pool_max_workers
     workers = max(1, min(worker_cap, provider_concurrency_sum, qps))
 
-    # BabelDOC's limiter controls aggregate paragraph starts. Every concrete provider
-    # additionally has its own QPS + concurrency gate, so several engines can safely
-    # contribute to the same document without exceeding their individual limits.
+                                                                                     
+                                                                                    
+                                                                                
     set_translate_rate_limiter(qps)
 
     await progress_cb({
@@ -82,6 +85,7 @@ async def run_babeldoc(
         "provider_strategy": provider_strategy,
         "aggregate_qps": qps,
         "translation_workers": workers,
+        "ignore_cache": bool(ignore_cache),
     })
 
     config = TranslationConfig(

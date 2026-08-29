@@ -7,8 +7,8 @@ bootstrap = (ROOT / 'backend/app/bootstrap.py').read_text(encoding='utf-8')
 jobs = (ROOT / 'backend/app/api/jobs.py').read_text(encoding='utf-8')
 system = (ROOT / 'backend/app/api/system.py').read_text(encoding='utf-8')
 models = (ROOT / 'backend/app/models.py').read_text(encoding='utf-8')
-ui = (ROOT / 'frontend/src/App.jsx').read_text(encoding='utf-8')
-css = (ROOT / 'frontend/src/style.css').read_text(encoding='utf-8')
+ui = (ROOT / 'user-frontend/src/App.jsx').read_text(encoding='utf-8')
+css = (ROOT / 'user-frontend/src/style.css').read_text(encoding='utf-8')
 
 for path in (ROOT / 'backend/app').rglob('*.py'):
     ast.parse(path.read_text(encoding='utf-8'), filename=str(path))
@@ -40,18 +40,9 @@ assert 'default_provider_ids: Mapped[list]' in models
 assert 'aggregate_qps_cap' in models
 assert 'multi_pool_max_workers' in models
 
-for needle in [
-    '速度优先 · 智能并行',
-    '主备模式 · 失败切换',
-    '腾讯机器翻译 TMT',
-    'TokenHub Hy-MT2',
-    '火山',
-    '阿里',
-    '默认引擎池',
-    '理论总 QPS',
-]:
+for needle in ['均衡分流','故障转移','腾讯机器翻译','火山机器翻译','阿里机器翻译','默认翻译池','API Base URL']:
     assert needle in ui, needle
 
-assert '.engine-choice' in css
-assert '.default-engine-pool' in css
+assert '.provider-user-card' in css
+assert '.default-pool' in css
 print('multi-engine-smoke: ok')

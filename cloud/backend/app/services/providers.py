@@ -15,14 +15,34 @@ from typing import Any
 from urllib.parse import quote, urlencode, urlparse
 
 import httpx
-import openai
-from babeldoc.translator.translator import BaseTranslator
+from sqlalchemy import select
+
+try:
+    import openai                
+except ModuleNotFoundError:                                                                           
+    openai = None                
+
+try:
+    from babeldoc.translator.translator import BaseTranslator                
+    _BABELDOC_AVAILABLE = True
+except ModuleNotFoundError:
+    _BABELDOC_AVAILABLE = False
+
+    class BaseTranslator:                                                                       
+        def __init__(self, lang_in: str, lang_out: str, ignore_cache: bool = False):
+            self.lang_in = lang_in
+            self.lang_out = lang_out
+            self.ignore_cache = ignore_cache
+
+        def add_cache_impact_parameters(self, *args, **kwargs):
+            return None
 
 from ..crypto import decrypt_json
 from ..db import SessionLocal
-from ..models import ProviderProfile
+from ..models import ProviderProfile, UserProviderProfile
 from .rate_limit import gate
 from .quota import quota_manager
+from .provider_security import validate_outbound_url
 from .translation_memory import translation_memory
 
 
@@ -64,7 +84,7 @@ def _hmac_sha256(key: bytes | str, data: bytes | str) -> bytes:
     return hmac.new(key, data, hashlib.sha256).digest()
 
 
-def _provider_limits(row: ProviderProfile, fallback_qps: int = 1) -> tuple[float, int]:
+def _provider_limits(row, fallback_qps: int = 1) -> tuple[float, int]:
     cfg = row.config or {}
     qps = float(cfg.get("qps") or fallback_qps or 1)
     concurrency = int(cfg.get("max_concurrency") or max(1, round(qps)))
@@ -78,7 +98,8 @@ class BaiduTranslator(BaseTranslator):
     def __init__(self, lang_in: str, lang_out: str, provider_id: str, qps: float,
                  max_concurrency: int, app_id: str, endpoint: str, *, auth_mode: str = "sign",
                  secret_key: str = "", api_key: str = "", model_type: str = "llm",
-                 reference: str = "", ignore_cache: bool = False):
+                 reference: str = "", service_type: str = "general", domain: str = "academic",
+                 ignore_cache: bool = False):
         super().__init__(lang_in, lang_out, ignore_cache)
         self.provider_id = provider_id
         self.qps = max(0.1, float(qps))
@@ -90,11 +111,16 @@ class BaiduTranslator(BaseTranslator):
         self.auth_mode = (auth_mode or "sign").strip().lower()
         self.model_type = (model_type or "llm").strip().lower()
         self.reference = (reference or "").strip()
-        self.model = "baidu-ai-text" if self.auth_mode == "api_key" else "baidu-general"
+        self.service_type = (service_type or "general").strip().lower()
+        self.domain = (domain or "academic").strip().lower()
+        self.model = f"baidu-{self.service_type}-{self.model_type}"
         self.client = httpx.Client(timeout=120)
         self.add_cache_impact_parameters("provider", self.model)
         self.add_cache_impact_parameters("auth_mode", self.auth_mode)
         self.add_cache_impact_parameters("model_type", self.model_type)
+        self.add_cache_impact_parameters("service_type", self.service_type)
+        if self.service_type == "domain":
+            self.add_cache_impact_parameters("domain", self.domain)
 
     def _request_payload(self, text: str) -> tuple[dict[str, str], dict[str, str]]:
         if self.auth_mode == "api_key":
@@ -108,8 +134,13 @@ class BaiduTranslator(BaseTranslator):
                 body["reference"] = self.reference
             return body, {"Authorization": f"Bearer {self.api_key}"}
         if not self.app_id or not self.secret_key:
-            raise RuntimeError("百度通用翻译需要 APPID 和开发者信息中的密钥")
+            raise RuntimeError("百度翻译需要 APPID 和开发者信息中的密钥")
         salt = str(random.randint(100000, 999999999))
+        if self.service_type == "domain":
+            if not self.domain:
+                raise RuntimeError("百度领域文本翻译需要选择领域")
+            sign = hashlib.md5(f"{self.app_id}{text}{salt}{self.domain}{self.secret_key}".encode("utf-8")).hexdigest()
+            return {"q": text, "from": _lang(self.lang_in), "to": _lang(self.lang_out), "appid": self.app_id, "salt": salt, "domain": self.domain, "sign": sign}, {}
         sign = hashlib.md5(f"{self.app_id}{text}{salt}{self.secret_key}".encode("utf-8")).hexdigest()
         return {"q": text, "from": _lang(self.lang_in), "to": _lang(self.lang_out), "appid": self.app_id, "salt": salt, "sign": sign}, {}
 
@@ -142,9 +173,9 @@ class BaiduTranslator(BaseTranslator):
                     else:
                         message = f"Baidu error {code}: {raw_message}"
                     gate.record_error(self.provider_id, message)
-                    # 54004 = account balance/quota exhausted. It is a hard
-                    # account state, not a transient rate limit, so return it to
-                    # MultiProviderTranslator immediately for quota-aware failover.
+                                                                           
+                                                                                
+                                                                                   
                     if code in {"52003", "54000", "54001", "54004", "58000", "58001", "58002", "58003", "58004"}:
                         raise ValueError(message)
                     raise RuntimeError(message)
@@ -175,6 +206,8 @@ class CloudOpenAITranslator(BaseTranslator):
         self.max_concurrency = max(1, int(max_concurrency))
         self.model = model
         self.base_url = base_url
+        if openai is None:
+            raise RuntimeError("openai package is not installed")
         self.client = openai.OpenAI(
             base_url=base_url, api_key=api_key,
             http_client=httpx.Client(limits=httpx.Limits(max_connections=None, max_keepalive_connections=None), timeout=600),
@@ -198,7 +231,7 @@ class CloudOpenAITranslator(BaseTranslator):
                 if not isinstance(content, str):
                     raise RuntimeError("translation provider returned an empty response")
                 return content.strip()
-            except (openai.RateLimitError, openai.APIConnectionError, openai.APITimeoutError) as exc:
+            except ((openai.RateLimitError, openai.APIConnectionError, openai.APITimeoutError) if openai is not None else ()) as exc:
                 last = exc
                 gate.record_error(self.provider_id, f"{exc.__class__.__name__}: {exc}")
                 time.sleep(min(20.0, 1.25 * (2 ** attempt)))
@@ -545,7 +578,7 @@ class VolcengineTranslator(BaseTranslator):
 
     @staticmethod
     def _error_message(resp: httpx.Response, payload: Any) -> str:
-        # openspeech v3 APIs report the application status in response headers.
+                                                                               
         header_code = str(resp.headers.get("X-Api-Status-Code") or "").strip()
         header_message = str(
             resp.headers.get("X-Api-Message")
@@ -603,7 +636,7 @@ class VolcengineTranslator(BaseTranslator):
                 if error:
                     gate.record_error(self.provider_id, error)
                     low = error.lower()
-                    # Credential/resource errors cannot recover through retries.
+                                                                                
                     if any(x in low for x in ["401", "403", "invalid", "unauthorized", "forbidden", "resource", "api key", "apikey", "45000001"]):
                         raise ValueError(error)
                     if "429" in low or "too many" in low or "rate" in low or "55000031" in low:
@@ -698,8 +731,8 @@ class AliyunTranslator(BaseTranslator):
     def do_translate(self, text, rate_limit_params: dict | None = None):
         if not text:
             return text
-        # Official Universal Edition input limit is 5,000 characters. BabelDOC
-        # paragraphs are normally shorter; split only unusually large blocks.
+                                                                              
+                                                                             
         if len(text) <= self.max_chars:
             try:
                 return self._one(text)
@@ -758,6 +791,7 @@ class MultiProviderTranslator(BaseTranslator):
         self.model = "multi:" + ",".join(x.provider_id for x in slots)
         self.lock = threading.RLock()
         self.quota_aware = bool(quota_aware)
+        self.zft_ignore_cache = bool(ignore_cache)
         self.add_cache_impact_parameters("providers", self.model)
         self.add_cache_impact_parameters("quota_aware", self.quota_aware)
         self.add_cache_impact_parameters("strategy", self.strategy)
@@ -783,8 +817,8 @@ class MultiProviderTranslator(BaseTranslator):
                 return []
             if self.strategy == "failover":
                 return [x[0] for x in sorted(scored, key=lambda pair: self.slots.index(pair[0]))]
-            # Weighted least-load: configured QPS is multiplied by quota health.
-            # Low-balance engines remain usable, but naturally receive fewer paragraphs.
+                                                                                
+                                                                                        
             return [x[0] for x in sorted(
                 scored,
                 key=lambda pair: (
@@ -811,9 +845,9 @@ class MultiProviderTranslator(BaseTranslator):
                 quota_manager.mark(slot.provider_id, slot.config, status, message, source=source)
             with self.lock:
                 slot.failures += 1
-                # Hard provider/account failures stay out of this job longer; transient
-                # failures get normal exponential cooldown. Persistent exclusion is
-                # additionally enforced by QuotaManager.
+                                                                                       
+                                                                                   
+                                                        
                 slot.cooldown_until = time.monotonic() + (300.0 if status in {"exhausted", "unavailable"} else min(60.0, 3.0 * (2 ** min(slot.failures, 4))))
             raise
         finally:
@@ -823,7 +857,7 @@ class MultiProviderTranslator(BaseTranslator):
     def do_translate(self, text, rate_limit_params: dict | None = None):
         if not text:
             return text
-        remembered = translation_memory.get(text, self.lang_in, self.lang_out)
+        remembered = None if self.zft_ignore_cache else translation_memory.get(text, self.lang_in, self.lang_out)
         if remembered is not None:
             return remembered
         errors: list[str] = []
@@ -835,7 +869,10 @@ class MultiProviderTranslator(BaseTranslator):
         for slot in ordered:
             try:
                 result = self._call(slot, text, rate_limit_params)
-                translation_memory.put(text, result, self.lang_in, self.lang_out, provider_id=slot.provider_id)
+                translation_memory.put(
+                    text, result, self.lang_in, self.lang_out, provider_id=slot.provider_id,
+                    replace=self.zft_ignore_cache,
+                )
                 return result
             except Exception as exc:
                 errors.append(f"{slot.provider_id}: {exc}")
@@ -843,13 +880,13 @@ class MultiProviderTranslator(BaseTranslator):
         raise RuntimeError("all translation providers failed: " + " | ".join(errors[-5:]))
 
     def do_llm_translate(self, text, rate_limit_params: dict | None = None):
-        # Keep BabelDOC on the generic translation path so classic MT engines and
-        # LLM engines can safely coexist inside one pool.
+                                                                                 
+                                                         
         raise NotImplementedError
 
 
 
-def provider_is_configured(row: ProviderProfile) -> bool:
+def provider_is_configured(row) -> bool:
     try:
         secrets = decrypt_json(row.secret_payload)
     except Exception:
@@ -869,19 +906,37 @@ def provider_is_configured(row: ProviderProfile) -> bool:
     return False
 
 
-def provider_record(provider_id: str) -> tuple[ProviderProfile, dict]:
+def _scoped_provider_id(user_id: str | None, provider_id: str) -> str:
+    return f"user:{user_id}:{provider_id}" if user_id else provider_id
+
+
+def provider_record(provider_id: str, user_id: str | None = None):
     with SessionLocal() as db:
-        row = db.get(ProviderProfile, provider_id)
-        if row is None:
-            raise RuntimeError(f"translation provider does not exist: {provider_id}")
+        if user_id:
+            row = db.scalar(
+                select(UserProviderProfile).where(
+                    UserProviderProfile.user_id == user_id,
+                    UserProviderProfile.provider_id == provider_id,
+                )
+            )
+            if row is None:
+                raise RuntimeError(f"translation provider is not configured for this account: {provider_id}")
+        else:
+                                                                                 
+                                                                                   
+            row = db.get(ProviderProfile, provider_id)
+            if row is None:
+                raise RuntimeError(f"translation provider does not exist: {provider_id}")
         db.expunge(row)
     if not row.enabled:
         raise RuntimeError(f"translation provider is disabled: {provider_id}")
     return row, decrypt_json(row.secret_payload)
 
-
-def create_translator(provider_id: str, lang_in: str, lang_out: str, fallback_qps: int = 1):
-    row, secrets = provider_record(provider_id)
+def create_translator(provider_id: str, lang_in: str, lang_out: str, fallback_qps: int = 1, ignore_cache: bool = False, user_id: str | None = None):
+    if not _BABELDOC_AVAILABLE:
+        raise RuntimeError("BabelDOC is not installed; install cloud/backend/requirements.txt before running translation jobs")
+    row, secrets = provider_record(provider_id, user_id)
+    scope_id = _scoped_provider_id(user_id, provider_id)
     qps, max_concurrency = _provider_limits(row, fallback_qps)
     config = row.config or {}
     if row.kind == "baidu":
@@ -890,23 +945,25 @@ def create_translator(provider_id: str, lang_in: str, lang_out: str, fallback_qp
         secret_key = str(secrets.get("secret_key") or "").strip()
         api_key = str(secrets.get("api_key") or "").strip()
         if auth_mode == "api_key":
-            endpoint = str(config.get("endpoint") or "https://fanyi-api.baidu.com/ait/api/aiTextTranslate").strip()
+            endpoint = validate_outbound_url(str(config.get("endpoint") or "https://fanyi-api.baidu.com/ait/api/aiTextTranslate").strip(), field="endpoint", resolve_dns=True)
             if not app_id or not api_key:
-                raise RuntimeError("百度大模型翻译已启用，但 APPID / API Key 未完整配置")
+                raise RuntimeError("百度机器/大模型文本翻译已启用，但 APPID / API Key 未完整配置")
         else:
-            endpoint = str(config.get("endpoint") or "https://fanyi-api.baidu.com/api/trans/vip/translate").strip()
+            endpoint = validate_outbound_url(str(config.get("endpoint") or ("https://fanyi-api.baidu.com/api/trans/vip/fieldtranslate" if str(config.get("service_type") or "").lower() == "domain" else "https://fanyi-api.baidu.com/api/trans/vip/translate")).strip(), field="endpoint", resolve_dns=True)
             if not app_id or not secret_key:
                 raise RuntimeError("百度通用翻译已启用，但 APPID / 开发者密钥未完整配置")
-        return BaiduTranslator(lang_in, lang_out, row.id, qps, max_concurrency, app_id, endpoint,
+        return BaiduTranslator(lang_in, lang_out, scope_id, qps, max_concurrency, app_id, endpoint,
                                auth_mode=auth_mode, secret_key=secret_key, api_key=api_key,
-                               model_type=str(config.get("model_type") or "llm"), reference=str(config.get("reference") or ""))
+                               model_type=str(config.get("model_type") or "llm"), reference=str(config.get("reference") or ""),
+                               service_type=str(config.get("service_type") or ("machine" if auth_mode == "api_key" and str(config.get("model_type") or "llm").lower() == "nmt" else "llm" if auth_mode == "api_key" else "general")),
+                               domain=str(config.get("domain") or "academic"), ignore_cache=ignore_cache)
     if row.kind == "openai_compatible":
         api_key = str(secrets.get("api_key") or "").strip()
         if not api_key:
             raise RuntimeError("OpenAI-compatible provider is enabled but API key is empty")
-        return CloudOpenAITranslator(lang_in, lang_out, row.id, qps, max_concurrency,
+        return CloudOpenAITranslator(lang_in, lang_out, scope_id, qps, max_concurrency,
                                      str(config.get("model") or "gpt-4.1-mini"),
-                                     str(config.get("base_url") or "https://api.openai.com/v1"), api_key)
+                                     validate_outbound_url(str(config.get("base_url") or "https://api.openai.com/v1"), field="base_url", resolve_dns=True), api_key, ignore_cache=ignore_cache)
     if row.kind == "tencent":
         auth_mode = str(config.get("auth_mode") or "tmt_tc3").strip().lower()
         if auth_mode in {"tmt_tc3", "legacy_tc3"}:
@@ -915,13 +972,13 @@ def create_translator(provider_id: str, lang_in: str, lang_out: str, fallback_qp
             if not secret_id or not secret_key:
                 raise RuntimeError("腾讯机器翻译 TMT 需要 SecretId 和 SecretKey")
             return TencentTMTTranslator(
-                lang_in, lang_out, row.id, qps, max_concurrency,
-                str(config.get("tmt_endpoint") or "https://tmt.tencentcloudapi.com"),
+                lang_in, lang_out, scope_id, qps, max_concurrency,
+                validate_outbound_url(str(config.get("tmt_endpoint") or "https://tmt.tencentcloudapi.com"), field="tmt_endpoint", resolve_dns=True),
                 secret_id, secret_key,
                 str(config.get("tmt_region") or "ap-beijing"),
                 str(config.get("tmt_version") or "2018-03-21"),
                 int(config.get("project_id") or 0),
-                int(config.get("max_chars") or 1900),
+                int(config.get("max_chars") or 1900), ignore_cache=ignore_cache,
             )
         if auth_mode == "hunyuan_tc3":
             secret_id = str(secrets.get("secret_id") or "").strip()
@@ -929,43 +986,45 @@ def create_translator(provider_id: str, lang_in: str, lang_out: str, fallback_qp
             if not secret_id or not secret_key:
                 raise RuntimeError("腾讯混元 ChatTranslations 需要 SecretId 和 SecretKey")
             return TencentHunyuanTranslator(
-                lang_in, lang_out, row.id, qps, max_concurrency,
-                str(config.get("hunyuan_endpoint") or "https://hunyuan.ai.tencentcloudapi.com"),
+                lang_in, lang_out, scope_id, qps, max_concurrency,
+                validate_outbound_url(str(config.get("hunyuan_endpoint") or "https://hunyuan.ai.tencentcloudapi.com"), field="hunyuan_endpoint", resolve_dns=True),
                 secret_id, secret_key,
                 str(config.get("hunyuan_model") or "hunyuan-translation-lite"),
-                str(config.get("field") or ""),
+                str(config.get("field") or ""), ignore_cache=ignore_cache,
             )
         api_key = str(secrets.get("api_key") or "").strip()
         if not api_key:
             raise RuntimeError("腾讯 TokenHub 翻译需要 API Key")
         return TencentTokenHubTranslator(
-            lang_in, lang_out, row.id, qps, max_concurrency,
+            lang_in, lang_out, scope_id, qps, max_concurrency,
             str(config.get("model") or "hy-mt2-plus"),
-            str(config.get("base_url") or "https://tokenhub.tencentmaas.com/v1"),
-            api_key,
+            validate_outbound_url(str(config.get("base_url") or "https://tokenhub.tencentmaas.com/v1"), field="base_url", resolve_dns=True),
+            api_key, ignore_cache=ignore_cache,
         )
     if row.kind == "volcengine":
         api_key = str(secrets.get("api_key") or "").strip()
         if not api_key:
             raise RuntimeError("火山机器翻译需要 API Key")
         return VolcengineTranslator(
-            lang_in, lang_out, row.id, qps, max_concurrency,
-            str(config.get("endpoint") or "https://openspeech.bytedance.com/api/v3/machine_translation/matx_translate"),
-            api_key, str(config.get("resource_id") or "volc.speech.mt"),
+            lang_in, lang_out, scope_id, qps, max_concurrency,
+            validate_outbound_url(str(config.get("endpoint") or "https://openspeech.bytedance.com/api/v3/machine_translation/matx_translate"), field="endpoint", resolve_dns=True),
+            api_key, str(config.get("resource_id") or "volc.speech.mt"), ignore_cache=ignore_cache,
         )
     if row.kind == "aliyun":
         ak = str(secrets.get("access_key_id") or "").strip()
         sk = str(secrets.get("access_key_secret") or "").strip()
         if not ak or not sk:
             raise RuntimeError("阿里翻译需要 AccessKey ID 和 AccessKey Secret")
-        return AliyunTranslator(lang_in, lang_out, row.id, qps, max_concurrency,
-                                str(config.get("endpoint") or "https://mt.cn-hangzhou.aliyuncs.com"), ak, sk,
+        return AliyunTranslator(lang_in, lang_out, scope_id, qps, max_concurrency,
+                                validate_outbound_url(str(config.get("endpoint") or "https://mt.cn-hangzhou.aliyuncs.com"), field="endpoint", resolve_dns=True), ak, sk,
                                 str(config.get("path") or "/api/translate/web/general"),
-                                str(config.get("scene") or "general"), int(config.get("max_chars") or 4900))
+                                str(config.get("scene") or "general"), int(config.get("max_chars") or 4900), ignore_cache=ignore_cache)
     raise RuntimeError(f"Unsupported translator provider kind: {row.kind}")
 
 
-def create_multi_translator(provider_ids: list[str], lang_in: str, lang_out: str, strategy: str = "balanced", quota_aware: bool = True) -> tuple[BaseTranslator, float, int]:
+def create_multi_translator(provider_ids: list[str], lang_in: str, lang_out: str, strategy: str = "balanced", quota_aware: bool = True, ignore_cache: bool = False, user_id: str | None = None) -> tuple[BaseTranslator, float, int]:
+    if not _BABELDOC_AVAILABLE:
+        raise RuntimeError("BabelDOC is not installed; install cloud/backend/requirements.txt before running translation jobs")
     clean: list[str] = []
     for value in provider_ids:
         value = str(value).strip()
@@ -978,15 +1037,16 @@ def create_multi_translator(provider_ids: list[str], lang_in: str, lang_out: str
     total_qps = 0.0
     total_concurrency = 0
     for provider_id in clean:
-        row, _ = provider_record(provider_id)
+        row, _ = provider_record(provider_id, user_id)
         qps, concurrency = _provider_limits(row, 1)
-        translator = create_translator(provider_id, lang_in, lang_out, max(1, round(qps)))
+        translator = create_translator(provider_id, lang_in, lang_out, max(1, round(qps)), ignore_cache=ignore_cache, user_id=user_id)
         config = dict(row.config or {})
-        slots.append(_MultiSlot(provider_id, translator, qps, concurrency, config))
-        # Hard-exhausted/unavailable providers should not inflate BabelDOC's aggregate
-        # launch rate for the next job. Unknown/low providers are weighted dynamically.
+        scope_id = _scoped_provider_id(user_id, provider_id)
+        slots.append(_MultiSlot(scope_id, translator, qps, concurrency, config))
+                                                                                      
+                                                                                       
         if quota_aware:
-            snap = quota_manager.snapshot(provider_id, config)
+            snap = quota_manager.snapshot(_scoped_provider_id(user_id, provider_id), config)
             if snap.get("status") in {"exhausted", "unavailable"}:
                 continue
             weight = max(0.05, float(snap.get("dispatch_weight") or 1.0))
@@ -995,20 +1055,20 @@ def create_multi_translator(provider_ids: list[str], lang_in: str, lang_out: str
         total_qps += qps * weight
         total_concurrency += concurrency
     if total_qps <= 0:
-        # Keep one worker alive so BabelDOC can surface a precise quota error instead
-        # of failing during config construction. MultiProviderTranslator will reject
-        # the paragraph with provider-specific status details.
+                                                                                     
+                                                                                    
+                                                              
         total_qps = 1.0
         total_concurrency = 1
-    return MultiProviderTranslator(lang_in, lang_out, slots, strategy=strategy, quota_aware=quota_aware), max(1.0, total_qps), max(1, total_concurrency)
+    return MultiProviderTranslator(lang_in, lang_out, slots, strategy=strategy, ignore_cache=ignore_cache, quota_aware=quota_aware), max(1.0, total_qps), max(1, total_concurrency)
 
-def provider_limits(provider_id: str, fallback_qps: int = 1) -> tuple[float, int]:
-    row, _ = provider_record(provider_id)
+def provider_limits(provider_id: str, fallback_qps: int = 1, user_id: str | None = None) -> tuple[float, int]:
+    row, _ = provider_record(provider_id, user_id)
     return _provider_limits(row, fallback_qps)
 
 
-def test_provider(provider_id: str) -> str:
-    translator = create_translator(provider_id, "en", "zh-CN", 1)
+def test_provider(provider_id: str, user_id: str | None = None) -> str:
+    translator = create_translator(provider_id, "en", "zh-CN", 1, user_id=user_id)
     if isinstance(translator, CloudOpenAITranslator):
         result = translator.llm_translate("Translate to Simplified Chinese. Output translation only: Hello world")
     else:

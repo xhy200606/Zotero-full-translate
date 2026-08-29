@@ -17,5 +17,5 @@ def record_job_event(job_id: str, payload: dict) -> None:
             ))
             db.commit()
     except Exception:
-        # Timeline persistence must never make the translation task fail.
+                                                                         
         pass
