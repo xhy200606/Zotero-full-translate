@@ -27,7 +27,11 @@ async function startup({ id, version, resourceURI, rootURI }, reason) {
     Zotero.PreferencePanes.register({
         pluginID: id,
         src: rootURI + "chrome/content/preferences.xhtml",
-        scripts: [rootURI + "chrome/content/preferences.js", rootURI + "chrome/content/preferences-release.js"],
+        scripts: [
+            rootURI + "chrome/content/preferences.js",
+            rootURI + "chrome/content/preferences-release.js",
+            rootURI + "chrome/content/preferences-connection-state.js"
+        ],
         label: "Zotero Full Translate",
         image: rootURI + "chrome/content/icons/icon-48.png"
     });
