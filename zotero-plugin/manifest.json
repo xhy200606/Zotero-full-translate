@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "Zotero Full Translate",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "description": "Zotero 全文 PDF 翻译客户端：连接 Zotero Full Translate Cloud，使用账户翻译 API 池执行全文翻译，显示实时进度，自动导入译文并支持原文/译文对照阅读。",
   "author": "Zotero Full Translate contributors",
   "icons": {
@@ -16,5 +16,5 @@
       "update_url": "https://example.com/zotero-full-translate/updates.json"
     }
   },
-  "homepage_url": "https://example.com/zotero-full-translate"
+  "homepage_url": "https://github.com/xhy200606/Zotero-full-translate"
 }
