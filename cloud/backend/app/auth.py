@@ -459,6 +459,33 @@ def revoke_device_sessions(db: Session, device: Device) -> None:
     db.commit()
 
 
+def device_is_active(db: Session, device: Device, *, now: datetime | None = None) -> bool:
+    """Return whether a device still has a live web session or live client API key.
+
+    Device rows are retained as history, so ``revoked=False`` alone does not mean
+    that the client is currently authorized.
+    """
+    if device.revoked:
+        return False
+    now = now or utcnow()
+    live_session = db.scalar(
+        select(AuthToken.id).where(
+            AuthToken.device_id == device.id,
+            AuthToken.revoked_at.is_(None),
+            AuthToken.expires_at > now,
+        ).limit(1)
+    )
+    if live_session:
+        return True
+    if device.last_api_key_id:
+        key = db.get(ClientApiKey, device.last_api_key_id)
+        if key is not None and key.revoked_at is None:
+            expires = _aware(key.expires_at)
+            if expires is None or expires > now:
+                return True
+    return False
+
+
 def ensure_bootstrap_admin() -> None:
     settings = get_settings()
     password = str(settings.zft_bootstrap_admin_password or "")

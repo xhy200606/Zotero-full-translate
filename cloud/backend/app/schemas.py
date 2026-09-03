@@ -171,6 +171,34 @@ class UserTranslationSettingsUpdate(BaseModel):
     default_provider_strategy: str = "balanced"
 
 
+class ClientProviderInstanceOut(BaseModel):
+    id: str
+    kind: str
+    display_name: str
+    vendor: str | None = None
+    template_id: str | None = None
+    qps: float = 1.0
+    max_concurrency: int = 1
+    quota_status: str = "normal"
+    quota_enabled: bool = True
+    quota_period: str = "month"
+    quota_total_chars: int | None = None
+    quota_used_chars: int | None = None
+    quota_remaining_chars: int | None = None
+    quota_remaining_percent: float | None = None
+    quota_reserve_chars: int = 0
+    quota_low_percent: float = 10.0
+    quota_reset_at: str | None = None
+    last_test_ok: bool | None = None
+    selected_by_default: bool = False
+
+
+class ClientProviderPoolOut(BaseModel):
+    items: list[ClientProviderInstanceOut] = Field(default_factory=list)
+    default_provider_ids: list[str] = Field(default_factory=list)
+    default_provider_strategy: str = "balanced"
+
+
 class ProviderTestOut(BaseModel):
     ok: bool
     provider: str
@@ -286,6 +314,7 @@ class LoginRequest(BaseModel):
     username: str = Field(min_length=1, max_length=80)
     password: str = Field(min_length=1, max_length=512)
     device_code: str = Field(min_length=4, max_length=160)
+    device_aliases: list[str] = Field(default_factory=list, max_length=8)
     device_name: str = Field(default="Browser", min_length=1, max_length=180)
     platform: str | None = Field(default=None, max_length=80)
     app_version: str | None = Field(default=None, max_length=48)
@@ -297,6 +326,7 @@ class RegisterRequest(BaseModel):
     email: str | None = Field(default=None, max_length=255)
     display_name: str | None = Field(default=None, max_length=120)
     device_code: str = Field(min_length=4, max_length=160)
+    device_aliases: list[str] = Field(default_factory=list, max_length=8)
     device_name: str = Field(default="Browser", min_length=1, max_length=180)
     platform: str | None = Field(default=None, max_length=80)
     app_version: str | None = Field(default=None, max_length=48)

@@ -1,4 +1,4 @@
-"""Static contract checks for Zotero 0.3.7 local-sync/retranslation behavior."""
+"""Static contract checks for Zotero 0.4.1 local-sync/retranslation behavior."""
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]

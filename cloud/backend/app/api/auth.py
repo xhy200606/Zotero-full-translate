@@ -23,6 +23,7 @@ from ..auth import (
     revoke_token,
     verify_password,
     web_session_cookie_name,
+    utcnow,
 )
 from ..config import get_settings
 from ..db import get_db
@@ -125,6 +126,36 @@ def _session_out(token: AuthToken, user: User, device: Device) -> AuthSessionOut
     )
 
 
+def _retire_browser_device_aliases(db: Session, user: User, current: Device, aliases: list[str] | None) -> None:
+    """Retire browser IDs that were replaced by the shared cross-port cookie.
+
+    Before Cloud 2.5, ports 3005 and 3006 each kept their own localStorage
+    device UUID. The new frontends send that previous UUID once as an alias
+    when adopting the shared host cookie, allowing the server to remove the
+    duplicate effective-client entry without guessing from user-agent data.
+    """
+    clean = []
+    for value in aliases or []:
+        code = str(value or "").strip()
+        if 4 <= len(code) <= 160 and code != current.device_code and code not in clean:
+            clean.append(code)
+    if not clean:
+        return
+    old_devices = db.scalars(
+        select(Device).where(Device.user_id == user.id, Device.device_code.in_(clean))
+    ).all()
+    if not old_devices:
+        return
+    now = utcnow()
+    for old in old_devices:
+        old.revoked = True
+        rows = db.scalars(
+            select(AuthToken).where(AuthToken.device_id == old.id, AuthToken.revoked_at.is_(None))
+        ).all()
+        for token in rows:
+            token.revoked_at = now
+
+
 def _set_session_cookie(response: Response, request: Request, raw: str, token: AuthToken) -> None:
     now = token.created_at
     try:
@@ -165,8 +196,27 @@ def _authenticate(db: Session, payload: LoginRequest) -> tuple[str, AuthToken, U
         platform=payload.platform,
         app_version=payload.app_version,
     )
-    from ..auth import utcnow
-    user.last_login_at = utcnow()
+    _retire_browser_device_aliases(db, user, device, payload.device_aliases)
+    now = utcnow()
+    user.last_login_at = now
+    # A browser/device should have a single live web session. Re-authentication
+    # rotates the token instead of accumulating parallel sessions for the same
+    # client instance. This also makes "有效客户端" reflect actual devices, not
+    # repeated logins.
+    previous = db.scalars(
+        select(AuthToken).where(
+            AuthToken.user_id == user.id,
+            AuthToken.device_id == device.id,
+            # 3005 (user portal) and 3006 (admin portal) intentionally use
+            # different cookies. Keep one live token per portal label so an
+            # administrator can stay signed in to both ports on one browser
+            # without the two sessions evicting each other.
+            AuthToken.label == payload.device_name,
+            AuthToken.revoked_at.is_(None),
+        )
+    ).all()
+    for old_token in previous:
+        old_token.revoked_at = now
     raw, token = issue_token(db, user, device, label=payload.device_name)
     db.commit()
     record_usage(
@@ -243,6 +293,7 @@ def register(payload: RegisterRequest, request: Request, response: Response, db:
             platform=payload.platform,
             app_version=payload.app_version,
         )
+        _retire_browser_device_aliases(db, user, device, payload.device_aliases)
         raw, token = issue_token(db, user, device, label=payload.device_name)
         db.commit()
 

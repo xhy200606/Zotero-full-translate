@@ -1,114 +1,190 @@
 <html:style>
-  #zft-prefpane { max-width: 900px; }
-  #zft-prefpane .tabs { display:flex; gap:4px; margin:0 0 16px; padding:3px; border-radius:10px; background:var(--material-mix-quarternary, rgba(127,127,127,.10)); }
-  #zft-prefpane .tab-btn { appearance:none; border:0; background:transparent; color:inherit; padding:7px 14px; border-radius:8px; cursor:pointer; }
-  #zft-prefpane .tab-btn[data-active="true"] { background:var(--material-background,#fff); box-shadow:0 1px 3px rgba(0,0,0,.14); font-weight:650; }
+  #zft-prefpane {
+    max-width: 980px;
+    padding: 4px 6px 24px;
+    --zft-border: color-mix(in srgb, currentColor 16%, transparent);
+    --zft-surface: color-mix(in srgb, var(--material-background,#fff) 96%, currentColor 4%);
+    --zft-soft: color-mix(in srgb, currentColor 8%, transparent);
+    --zft-accent: AccentColor;
+  }
+  #zft-prefpane, #zft-prefpane * { box-sizing: border-box; }
+  #zft-prefpane .brandbar {
+    display:flex; align-items:center; gap:12px; margin:0 0 14px; padding:14px 16px;
+    border:1px solid var(--zft-border); border-radius:20px; background:var(--material-background,#fff);
+  }
+  #zft-prefpane .brandmark {
+    display:flex; align-items:center; justify-content:center; width:42px; height:42px; flex:0 0 42px;
+    border-radius:13px; background:var(--zft-soft); overflow:hidden;
+  }
+  #zft-prefpane .brandmark img { display:block; width:38px; height:38px; object-fit:contain; }
+  #zft-prefpane .brandcopy { min-width:0; flex:1; }
+  #zft-prefpane .brandcopy strong { display:block; font-size:15px; line-height:1.2; }
+  #zft-prefpane .versionchips { display:flex; align-items:center; gap:7px; flex-wrap:wrap; justify-content:flex-end; }
+  #zft-prefpane .chip { display:inline-flex; align-items:center; min-height:26px; padding:0 10px; border-radius:999px; background:var(--zft-soft); font-size:11px; }
+  #zft-prefpane .tabs {
+    display:flex; gap:5px; margin:0 0 14px; padding:4px; border:1px solid var(--zft-border);
+    border-radius:16px; background:var(--zft-surface);
+  }
+  #zft-prefpane .tab-btn {
+    appearance:none; -moz-appearance:none; border:0 !important; background:transparent; color:inherit;
+    padding:8px 18px; border-radius:11px !important; cursor:pointer; font-size:12px;
+  }
+  #zft-prefpane .tab-btn[data-active="true"] { background:var(--material-background,#fff); box-shadow:0 1px 5px rgba(0,0,0,.12); font-weight:700; }
   #zft-prefpane .tab { display:none; }
   #zft-prefpane .tab[data-active="true"] { display:block; }
-  #zft-prefpane .section { margin:0 0 18px; padding:14px 16px; border-radius:14px; background:var(--material-mix-quarternary, rgba(127,127,127,.055)); }
-  #zft-prefpane h2 { margin:0 0 10px; font-size:15px; }
-  #zft-prefpane .row { display:grid; grid-template-columns:205px minmax(280px,1fr); align-items:center; gap:12px; min-height:34px; margin:5px 0; }
-  #zft-prefpane .row.wide { grid-template-columns:1fr; }
-  #zft-prefpane input[type="text"], #zft-prefpane input[type="password"], #zft-prefpane input[type="number"], #zft-prefpane select { width:100%; box-sizing:border-box; }
-  #zft-prefpane .hint { opacity:.70; font-size:12px; line-height:1.55; }
-  #zft-prefpane .check { display:flex; align-items:center; gap:7px; }
-  #zft-prefpane .checks { display:flex; flex-wrap:wrap; gap:8px 16px; }
-  #zft-prefpane .checks label { display:flex; align-items:center; gap:6px; min-width:118px; }
-  #zft-prefpane .status { display:block; font-size:12px; opacity:.82; margin-top:8px; white-space:pre-wrap; line-height:1.5; }
-  #zft-prefpane .actions { display:flex; flex-wrap:wrap; gap:8px; }
-  #zft-prefpane .hero { margin:0 0 16px; padding:14px 16px; border-radius:14px; background:color-mix(in srgb, currentColor 6%, transparent); }
-  #zft-prefpane .hero strong { display:block; margin-bottom:4px; }
-  #zft-prefpane .provider-panel { padding:10px 12px; border:1px solid var(--material-panedivider, rgba(127,127,127,.22)); border-radius:10px; }
-  #zft-prefpane button { cursor:pointer; }
+  #zft-prefpane .section {
+    margin:0 0 14px; padding:17px 20px; border:1px solid var(--zft-border); border-radius:20px; background:var(--zft-surface);
+  }
+  #zft-prefpane h2 { margin:0 0 12px; font-size:13px; font-weight:720; }
+  #zft-prefpane .row {
+    display:grid; grid-template-columns:180px minmax(0,1fr); align-items:center; column-gap:18px;
+    min-height:46px; margin:3px 0;
+  }
+  #zft-prefpane .row.wide { display:block; min-height:0; margin-top:10px; }
+  #zft-prefpane .row > html\:label:first-child { font-size:12px; line-height:1.3; }
+  #zft-prefpane .field, #zft-prefpane .select-field, #zft-prefpane .number-field { width:100%; min-width:0; }
+  #zft-prefpane input[type="text"], #zft-prefpane input[type="password"], #zft-prefpane input[type="number"], #zft-prefpane select {
+    appearance:none; -moz-appearance:none; width:100%; min-width:0; height:38px; padding:7px 12px;
+    border:1px solid var(--zft-border) !important; border-radius:12px !important;
+    background:var(--material-background,#fff); color:inherit; font:inherit; outline:none;
+  }
+  #zft-prefpane input:focus, #zft-prefpane select:focus { border-color:var(--zft-accent) !important; box-shadow:0 0 0 2px color-mix(in srgb, AccentColor 20%, transparent); }
+  #zft-prefpane .select-field { position:relative; }
+  #zft-prefpane .select-field select { padding-right:34px; }
+  #zft-prefpane .select-field::after { content:"⌄"; position:absolute; right:12px; top:7px; pointer-events:none; font-size:15px; opacity:.72; }
+  #zft-prefpane .number-field { position:relative; }
+  #zft-prefpane .number-field input { padding-right:52px; }
+  #zft-prefpane .number-field .unit { position:absolute; right:12px; top:10px; font-size:11px; opacity:.62; pointer-events:none; }
+  #zft-prefpane button:not(.tab-btn) {
+    appearance:none; -moz-appearance:none; min-height:36px; padding:7px 14px;
+    border:1px solid var(--zft-border) !important; border-radius:12px !important;
+    background:var(--material-background,#fff); color:inherit; cursor:pointer; font:inherit;
+  }
+  #zft-prefpane button:not(.tab-btn):hover { background:var(--zft-soft); }
+  #zft-prefpane .actions { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+  #zft-prefpane .status { display:block; margin-top:8px; font-size:11px; line-height:1.4; white-space:pre-wrap; }
+  #zft-prefpane .status:empty { display:none; }
+  #zft-prefpane .toggle-control { display:inline-flex; align-items:center; width:44px; height:26px; cursor:pointer; }
+  #zft-prefpane .toggle-control input { position:absolute; opacity:0; pointer-events:none; }
+  #zft-prefpane .toggle-track { width:44px; height:26px; padding:3px; border:1px solid var(--zft-border); border-radius:999px; background:color-mix(in srgb,currentColor 13%,transparent); transition:.15s ease; }
+  #zft-prefpane .toggle-knob { display:block; width:18px; height:18px; border-radius:50%; background:var(--material-background,#fff); box-shadow:0 1px 3px rgba(0,0,0,.25); transition:transform .15s ease; }
+  #zft-prefpane .toggle-control input:checked + .toggle-track { background:var(--zft-accent); border-color:var(--zft-accent); }
+  #zft-prefpane .toggle-control input:checked + .toggle-track .toggle-knob { transform:translateX(18px); }
+  #zft-prefpane .provider-panel { margin:10px 0 2px; padding:12px; border:1px solid var(--zft-border); border-radius:16px; background:var(--material-background,#fff); }
+  #zft-prefpane .engine-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; margin-bottom:12px; }
+  #zft-prefpane .engine-option { display:grid; grid-template-columns:22px minmax(0,1fr); gap:9px; align-items:center; min-height:44px; padding:8px 10px; border:1px solid var(--zft-border); border-radius:12px; background:var(--zft-surface); cursor:pointer; min-width:0; }
+  #zft-prefpane .engine-option input { position:absolute; opacity:0; pointer-events:none; }
+  #zft-prefpane .engine-check { width:20px; height:20px; border:1px solid var(--zft-border); border-radius:7px; background:var(--material-background,#fff); display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:800; }
+  #zft-prefpane .engine-option input:checked + .engine-check { background:var(--zft-accent); border-color:var(--zft-accent); color:white; }
+  #zft-prefpane .engine-option input:checked + .engine-check::after { content:"✓"; }
+  #zft-prefpane .engine-copy { min-width:0; }
+  #zft-prefpane .engine-name { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px; font-weight:650; }
+  #zft-prefpane .engine-meta { display:block; margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:10px; opacity:.58; }
+  #zft-prefpane .engine-empty { padding:10px 4px 14px; font-size:12px; opacity:.65; }
+  #zft-prefpane .provider-toolbar { display:flex; justify-content:flex-end; margin-top:8px; }
+  #zft-prefpane .quota-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+  #zft-prefpane .quota-card { min-width:0; padding:11px 12px; border:1px solid var(--zft-border); border-radius:14px; background:var(--material-background,#fff); }
+  #zft-prefpane .quota-card[data-level="low"] { border-color:#d97706; }
+  #zft-prefpane .quota-card[data-level="critical"] { border-color:#b42318; }
+  #zft-prefpane .quota-head { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+  #zft-prefpane .quota-name { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px; font-weight:680; }
+  #zft-prefpane .quota-value { flex:0 0 auto; white-space:nowrap; font-size:11px; font-weight:680; font-variant-numeric:tabular-nums; }
+  #zft-prefpane .quota-bar { height:6px; margin-top:9px; overflow:hidden; border-radius:999px; background:var(--zft-soft); }
+  #zft-prefpane .quota-bar > i { display:block; height:100%; border-radius:inherit; background:var(--zft-accent); }
+  #zft-prefpane .quota-card[data-level="low"] .quota-bar > i { background:#d97706; }
+  #zft-prefpane .quota-card[data-level="critical"] .quota-bar > i { background:#b42318; }
+  #zft-prefpane .quota-meta { display:flex; justify-content:space-between; gap:8px; margin-top:6px; font-size:10px; opacity:.62; font-variant-numeric:tabular-nums; }
+  #zft-prefpane .quota-empty { padding:10px 2px; font-size:12px; opacity:.62; }
   #zft-prefpane [hidden] { display:none !important; }
+  @media (max-width:720px) {
+    #zft-prefpane .row { grid-template-columns:1fr; gap:7px; padding:5px 0; }
+    #zft-prefpane .engine-grid, #zft-prefpane .quota-grid { grid-template-columns:1fr; }
+    #zft-prefpane .versionchips { display:none; }
+    #zft-prefpane .tabs { overflow-x:auto; }
+  }
 </html:style>
 
 <vbox id="zft-prefpane" onload="window.ZFT_Preferences?.init?.()">
+  <html:div class="brandbar">
+    <html:div class="brandmark"><html:img src="chrome://zft/content/icons/icon-96.png" alt=""/></html:div>
+    <html:div class="brandcopy"><html:strong>Zotero Full Translate</html:strong></html:div>
+    <html:div class="versionchips"><html:span class="chip">插件 0.4.2</html:span><html:span class="chip">Cloud 2.5.2</html:span></html:div>
+  </html:div>
+
   <html:div class="tabs">
-    <html:button type="button" class="tab-btn" data-tab-button="cloud" data-active="true">Cloud</html:button>
-    <html:button type="button" class="tab-btn" data-tab-button="translation">翻译任务</html:button>
+    <html:button type="button" class="tab-btn" data-tab-button="cloud" data-active="true">连接</html:button>
+    <html:button type="button" class="tab-btn" data-tab-button="translation">翻译</html:button>
     <html:button type="button" class="tab-btn" data-tab-button="output">输出</html:button>
     <html:button type="button" class="tab-btn" data-tab-button="advanced">高级</html:button>
   </html:div>
 
-  <html:div class="hero">
-    <html:strong>Zotero-full-translate Thin Client</html:strong>
-    <html:div class="hint">PDF 解析、BabelDOC 排版、翻译引擎、QPS、并发、重试与任务队列全部在 Zotero-full-translate Cloud 执行；Zotero 只上传 PDF、监控任务、取消、下载并挂载结果。</html:div>
-  </html:div>
-
   <html:div class="tab" data-tab="cloud" data-active="true">
     <html:div class="section">
-      <html:h2>连接</html:h2>
-      <html:div class="row"><html:label>Cloud API 地址</html:label><html:input type="text" data-pref="cloud.baseURL" placeholder="http://192.168.1.205:3005"/></html:div>
-      <html:div class="row"><html:label>API Key</html:label><html:input type="password" data-pref="cloud.apiKey" autocomplete="off"/></html:div>
-      <html:div class="row"><html:label>客户端 ID</html:label><html:input id="zft-cloud-client-id" type="text" readonly="readonly"/></html:div>
-      <html:div class="row wide"><html:div class="actions">
-        <html:button type="button" id="zft-test-pdf2zh-cloud">测试连接</html:button>
-        <html:button type="button" id="zft-cloud-refresh">刷新云端状态</html:button>
-        <html:button type="button" id="zft-cloud-console">打开控制台</html:button>
-      </html:div><html:span id="zft-pdf2zh-cloud-status" class="status"></html:span></html:div>
-      <html:div class="hint">单容器部署时，API 地址和 Web 控制台使用同一个地址，例如 <html:code>http://192.168.1.205:3005</html:code>。</html:div>
+      <html:h2>Cloud 连接</html:h2>
+      <html:div class="row"><html:label>Cloud 地址</html:label><html:div class="field"><html:input type="text" data-pref="cloud.baseURL" placeholder="http://192.168.1.205:3005"/></html:div></html:div>
+      <html:div class="row"><html:label>账户 API Key</html:label><html:div class="field"><html:input type="password" data-pref="cloud.apiKey" autocomplete="off" placeholder="zftk_…"/></html:div></html:div>
+      <html:div class="row wide"><html:div class="actions"><html:button type="button" id="zft-cloud-login">验证并连接</html:button><html:button type="button" id="zft-test-pdf2zh-cloud">测试连接</html:button><html:button type="button" id="zft-cloud-refresh">刷新状态</html:button><html:button type="button" id="zft-cloud-console">打开 Cloud</html:button><html:button type="button" id="zft-cloud-logout">清除 API Key</html:button></html:div><html:span id="zft-pdf2zh-cloud-status" class="status"></html:span></html:div>
     </html:div>
 
     <html:div class="section">
-      <html:h2>任务恢复</html:h2>
-      <html:div class="row"><html:label>自动恢复</html:label><html:label class="check"><html:input type="checkbox" data-pref="cloud.autoRestore"/> Zotero 启动后恢复本客户端未完成的云端任务</html:label></html:div>
-      <html:div class="row"><html:label>完成后自动导入</html:label><html:label class="check"><html:input type="checkbox" data-pref="cloud.autoImportCompleted"/> 即使翻译期间关闭 Zotero，下次启动也自动下载完成的 PDF</html:label></html:div>
-      <html:div class="row"><html:label>恢复查询数量</html:label><html:input type="number" min="10" max="200" step="10" data-pref="cloud.recoveryLookback"/></html:div>
-      <html:div class="row"><html:label>历史译文复用</html:label><html:label class="check"><html:input type="checkbox" data-pref="cloud.reuseHistory"/> 上传前计算 PDF SHA-256，命中云端历史时跳过上传与翻译</html:label></html:div>
-      <html:div class="row wide"><html:div class="actions"><html:button type="button" id="zft-cloud-recover">立即恢复/检查任务</html:button></html:div><html:span id="zft-cloud-recover-status" class="status"></html:span></html:div>
+      <html:h2>任务与同步</html:h2>
+      <html:div class="row"><html:label>自动恢复任务</html:label><html:label class="toggle-control"><html:input type="checkbox" data-pref="cloud.autoRestore"/><html:span class="toggle-track"><html:span class="toggle-knob"></html:span></html:span></html:label></html:div>
+      <html:div class="row"><html:label>完成后自动导入</html:label><html:label class="toggle-control"><html:input type="checkbox" data-pref="cloud.autoImportCompleted"/><html:span class="toggle-track"><html:span class="toggle-knob"></html:span></html:span></html:label></html:div>
+      <html:div class="row"><html:label>恢复查询数量</html:label><html:div class="field"><html:input type="number" min="10" max="200" step="10" data-pref="cloud.recoveryLookback"/></html:div></html:div>
+      <html:div class="row"><html:label>历史译文复用</html:label><html:label class="toggle-control"><html:input type="checkbox" data-pref="cloud.reuseHistory"/><html:span class="toggle-track"><html:span class="toggle-knob"></html:span></html:span></html:label></html:div>
+      <html:div class="row"><html:label>跨设备自动绑定</html:label><html:label class="toggle-control"><html:input type="checkbox" data-pref="cloud.autoSyncTranslations"/><html:span class="toggle-track"><html:span class="toggle-knob"></html:span></html:span></html:label></html:div>
+      <html:div class="row wide"><html:div class="actions"><html:button type="button" id="zft-cloud-recover">检查云端任务</html:button></html:div><html:span id="zft-cloud-recover-status" class="status"></html:span></html:div>
     </html:div>
   </html:div>
 
   <html:div class="tab" data-tab="translation">
     <html:div class="section">
-      <html:h2>云端多引擎</html:h2>
-      <html:div class="row"><html:label>引擎选择</html:label><html:select data-pref="cloud.providerMode"><html:option value="server-default">使用服务器默认引擎池（推荐）</html:option><html:option value="custom">由 Zotero 指定引擎</html:option></html:select></html:div>
-      <html:div id="zft-cloud-provider-custom" class="provider-panel">
-        <html:div class="row wide"><html:div class="checks">
-          <html:label><html:input type="checkbox" data-pref="cloud.provider.baidu"/> 百度</html:label>
-          <html:label><html:input type="checkbox" data-pref="cloud.provider.tencent"/> 腾讯 TMT / TokenHub</html:label>
-          <html:label><html:input type="checkbox" data-pref="cloud.provider.volcengine"/> 火山机器翻译</html:label>
-          <html:label><html:input type="checkbox" data-pref="cloud.provider.aliyun"/> 阿里</html:label>
-          <html:label><html:input type="checkbox" data-pref="cloud.provider.openai_compatible"/> OpenAI-compatible</html:label>
-        </html:div></html:div>
-        <html:div class="row"><html:label>调度策略</html:label><html:select data-pref="cloud.providerStrategy"><html:option value="balanced">负载均衡 · 速度优先</html:option><html:option value="failover">主备切换 · 一致性优先</html:option></html:select></html:div>
+      <html:h2>翻译引擎</html:h2>
+      <html:div class="row"><html:label>引擎来源</html:label><html:div class="select-field"><html:select data-pref="cloud.providerMode"><html:option value="server-default">使用 Cloud 默认 API 池</html:option><html:option value="custom">由 Zotero 选择 API 实例</html:option></html:select></html:div></html:div>
+      <html:div id="zft-cloud-provider-custom" class="provider-panel" hidden="hidden">
+        <html:div id="zft-cloud-provider-list" class="engine-grid"></html:div>
+        <html:div class="row"><html:label>调度策略</html:label><html:div class="select-field"><html:select data-pref="cloud.providerStrategy"><html:option value="balanced">负载均衡</html:option><html:option value="failover">主备切换</html:option></html:select></html:div></html:div>
+        <html:div class="provider-toolbar"><html:button type="button" id="zft-cloud-provider-refresh">刷新 API 池</html:button></html:div>
       </html:div>
       <html:div class="row wide"><html:span id="zft-cloud-provider-status" class="status"></html:span></html:div>
-          </html:div>
+    </html:div>
+
+    <html:div class="section">
+      <html:h2>API 额度</html:h2>
+      <html:div id="zft-cloud-quota-list" class="quota-grid"></html:div>
+    </html:div>
 
     <html:div class="section">
       <html:h2>语言</html:h2>
-      <html:div class="row"><html:label>源语言</html:label><html:input type="text" data-pref="sourceLanguage" placeholder="auto"/></html:div>
-      <html:div class="row"><html:label>目标语言</html:label><html:input type="text" data-pref="targetLanguage" placeholder="zh-CN"/></html:div>
+      <html:div class="row"><html:label>源语言</html:label><html:div class="field"><html:input type="text" data-pref="sourceLanguage" placeholder="auto"/></html:div></html:div>
+      <html:div class="row"><html:label>目标语言</html:label><html:div class="field"><html:input type="text" data-pref="targetLanguage" placeholder="zh-CN"/></html:div></html:div>
     </html:div>
   </html:div>
 
   <html:div class="tab" data-tab="output">
     <html:div class="section">
-      <html:h2>BabelDOC 固定版式 PDF</html:h2>
-      <html:div class="row"><html:label>默认正式输出</html:label><html:label class="check"><html:input type="checkbox" data-pref="output.preferLayoutPDF"/> “全文翻译”直接创建 Cloud BabelDOC 任务</html:label></html:div>
-      <html:div class="row"><html:label>附件方式</html:label><html:select data-pref="output.importMode"><html:option value="import">导入 Zotero 存储</html:option><html:option value="link">链接本地文件</html:option></html:select></html:div>
-      <html:div class="row"><html:label>生成后打开</html:label><html:label class="check"><html:input type="checkbox" data-pref="output.openPDF"/> 自动打开译文 PDF</html:label></html:div>
-      <html:div class="row"><html:label>添加标签</html:label><html:label class="check"><html:input type="checkbox" data-pref="output.addTag"/> 添加译文标签</html:label></html:div>
-      <html:div class="row"><html:label>标签</html:label><html:input type="text" data-pref="output.tag"/></html:div>
-          </html:div>
+      <html:h2>译文 PDF</html:h2>
+      <html:div class="row"><html:label>固定版式输出</html:label><html:label class="toggle-control"><html:input type="checkbox" data-pref="output.preferLayoutPDF"/><html:span class="toggle-track"><html:span class="toggle-knob"></html:span></html:span></html:label></html:div>
+      <html:div class="row"><html:label>附件方式</html:label><html:div class="select-field"><html:select data-pref="output.importMode"><html:option value="import">导入 Zotero 存储</html:option><html:option value="link">链接本地文件</html:option></html:select></html:div></html:div>
+      <html:div class="row"><html:label>完成后打开</html:label><html:label class="toggle-control"><html:input type="checkbox" data-pref="output.openPDF"/><html:span class="toggle-track"><html:span class="toggle-knob"></html:span></html:span></html:label></html:div>
+      <html:div class="row"><html:label>添加标签</html:label><html:label class="toggle-control"><html:input type="checkbox" data-pref="output.addTag"/><html:span class="toggle-track"><html:span class="toggle-knob"></html:span></html:span></html:label></html:div>
+      <html:div class="row"><html:label>标签</html:label><html:div class="field"><html:input type="text" data-pref="output.tag"/></html:div></html:div>
+    </html:div>
 
     <html:div class="section">
-      <html:h2>原文 / 译文左右对照</html:h2>
-      <html:div class="row"><html:label>翻译完成后</html:label><html:label class="check"><html:input type="checkbox" data-pref="compare.openAfterTranslation"/> 在当前 Zotero Reader 右侧显示译文</html:label></html:div>
-      <html:div class="row"><html:label>联动滚动</html:label><html:label class="check"><html:input type="checkbox" data-pref="compare.syncScroll"/> 原文与译文双向联动滚动；关闭后独立滚动</html:label></html:div>
-          </html:div>
+      <html:h2>原文 / 译文对照</html:h2>
+      <html:div class="row"><html:label>翻译完成后打开</html:label><html:label class="toggle-control"><html:input type="checkbox" data-pref="compare.openAfterTranslation"/><html:span class="toggle-track"><html:span class="toggle-knob"></html:span></html:span></html:label></html:div>
+      <html:div class="row"><html:label>联动滚动</html:label><html:label class="toggle-control"><html:input type="checkbox" data-pref="compare.syncScroll"/><html:span class="toggle-track"><html:span class="toggle-knob"></html:span></html:span></html:label></html:div>
+    </html:div>
   </html:div>
 
   <html:div class="tab" data-tab="advanced">
     <html:div class="section">
-      <html:h2>Thin Client</html:h2>
-      <html:div class="row"><html:label>纯云端模式</html:label><html:label class="check"><html:input type="checkbox" data-pref="cloud.thinClient"/> 隐藏旧版本地解析/翻译入口，只使用 Zotero-full-translate Cloud</html:label></html:div>
-      <html:div class="row"><html:label>任务查询间隔</html:label><html:div><html:input type="number" min="500" max="10000" step="100" data-pref="cloud.pollMs"/> ms</html:div></html:div>
-      <html:div class="row"><html:label>上传超时</html:label><html:div><html:input type="number" min="30000" max="1800000" step="1000" data-pref="cloud.uploadTimeoutMs"/> ms</html:div></html:div>
-      <html:div class="row"><html:label>下载超时</html:label><html:div><html:input type="number" min="30000" max="1800000" step="1000" data-pref="cloud.downloadTimeoutMs"/> ms</html:div></html:div>
-      <html:div class="hint">兼容代码仍保留在本版本源码中用于回退，但纯云端模式不会从 Reader 菜单暴露本地 MinerU、Translate for Zotero、GPT、pdf2zh_next 或 Doc2X 执行入口。</html:div>
+      <html:h2>运行参数</html:h2>
+      <html:div class="row"><html:label>纯云端模式</html:label><html:label class="toggle-control"><html:input type="checkbox" data-pref="cloud.thinClient"/><html:span class="toggle-track"><html:span class="toggle-knob"></html:span></html:span></html:label></html:div>
+      <html:div class="row"><html:label>任务查询间隔</html:label><html:div class="number-field"><html:input type="number" min="500" max="10000" step="100" data-pref="cloud.pollMs"/><html:span class="unit">ms</html:span></html:div></html:div>
+      <html:div class="row"><html:label>上传超时</html:label><html:div class="number-field"><html:input type="number" min="30000" max="1800000" step="1000" data-pref="cloud.uploadTimeoutMs"/><html:span class="unit">ms</html:span></html:div></html:div>
+      <html:div class="row"><html:label>下载超时</html:label><html:div class="number-field"><html:input type="number" min="30000" max="1800000" step="1000" data-pref="cloud.downloadTimeoutMs"/><html:span class="unit">ms</html:span></html:div></html:div>
     </html:div>
   </html:div>
 </vbox>

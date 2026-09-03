@@ -669,7 +669,8 @@ class AliyunTranslator(BaseTranslator):
     def __init__(self, lang_in: str, lang_out: str, provider_id: str, qps: float,
                  max_concurrency: int, endpoint: str, access_key_id: str, access_key_secret: str,
                  path: str = "/api/translate/web/general", scene: str = "general",
-                 max_chars: int = 4900, ignore_cache: bool = False):
+                 max_chars: int = 4900, ignore_cache: bool = False, *,
+                 api_mode: str = "rest", action: str = "TranslateGeneral", context: str = ""):
         super().__init__(lang_in, lang_out, ignore_cache)
         self.provider_id = provider_id
         self.qps = max(0.1, float(qps))
@@ -680,10 +681,15 @@ class AliyunTranslator(BaseTranslator):
         self.path = path if path.startswith("/") else "/" + path
         self.scene = scene or "general"
         self.max_chars = max(500, int(max_chars))
-        self.model = "aliyun-general"
+        self.api_mode = str(api_mode or "rest").strip().lower()
+        self.action = str(action or ("Translate" if self.api_mode == "rpc" else "TranslateGeneral")).strip()
+        self.context = str(context or "").strip()
+        self.model = "aliyun-professional" if self.api_mode == "rpc" and self.action == "Translate" else "aliyun-general"
         self.client = httpx.Client(timeout=120)
         self.add_cache_impact_parameters("path", self.path)
         self.add_cache_impact_parameters("scene", self.scene)
+        self.add_cache_impact_parameters("api_mode", self.api_mode)
+        self.add_cache_impact_parameters("action", self.action)
 
     def _headers(self, payload: bytes) -> dict[str, str]:
         parsed = urlparse(self.endpoint)
@@ -706,7 +712,61 @@ class AliyunTranslator(BaseTranslator):
             "x-acs-signature-nonce": nonce, "x-acs-signature-method": "HMAC-SHA1", "x-acs-version": "2019-01-02",
         }
 
-    def _one(self, text: str) -> str:
+    @staticmethod
+    def _rpc_encode(value: str) -> str:
+        return quote(str(value), safe="~")
+
+    def _rpc_signature(self, params: dict[str, str]) -> str:
+        canonical = "&".join(
+            f"{self._rpc_encode(k)}={self._rpc_encode(params[k])}" for k in sorted(params)
+        )
+        string_to_sign = "POST&%2F&" + self._rpc_encode(canonical)
+        digest = hmac.new(
+            (self.access_key_secret + "&").encode("utf-8"),
+            string_to_sign.encode("utf-8"),
+            hashlib.sha1,
+        ).digest()
+        return base64.b64encode(digest).decode("ascii")
+
+    def _rpc_one(self, text: str) -> str:
+        now = datetime.now(timezone.utc)
+        params = {
+            "AccessKeyId": self.access_key_id,
+            "Action": self.action,
+            "Format": "JSON",
+            "FormatType": "text",
+            "SignatureMethod": "HMAC-SHA1",
+            "SignatureNonce": uuid.uuid4().hex,
+            "SignatureVersion": "1.0",
+            "SourceLanguage": _lang(self.lang_in),
+            "SourceText": text,
+            "TargetLanguage": _lang(self.lang_out),
+            "Timestamp": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "Version": "2018-10-12",
+            "Scene": self.scene,
+        }
+        if self.context:
+            params["Context"] = self.context
+        params["Signature"] = self._rpc_signature(params)
+        with gate.slot(self.provider_id, self.qps, self.max_concurrency) as wait_ms:
+            gate.record_request(self.provider_id, chars=len(text), wait_ms=wait_ms)
+            resp = self.client.post(self.endpoint + "/", data=params, headers={"Accept": "application/json"})
+        resp.raise_for_status()
+        try:
+            data = resp.json()
+        except Exception:
+            raise RuntimeError(f"Aliyun authentication/API error: {resp.text[:300]}")
+        root = data.get(f"{self.action}Response") if isinstance(data, dict) else None
+        root = root if isinstance(root, dict) else data
+        code = str((root or {}).get("Code") or "200")
+        if code not in {"200", "Success", "success"}:
+            raise RuntimeError(f"Aliyun {code}: {(root or {}).get('Message') or 'translation failed'}")
+        translated = str((((root or {}).get("Data") or {}).get("Translated")) or "").strip()
+        if not translated:
+            raise RuntimeError("Aliyun returned an empty translation")
+        return translated
+
+    def _rest_one(self, text: str) -> str:
         body = {"FormatType": "text", "SourceLanguage": _lang(self.lang_in), "TargetLanguage": _lang(self.lang_out), "SourceText": text, "Scene": self.scene}
         payload = json.dumps(body, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
         url = self.endpoint + self.path
@@ -727,6 +787,9 @@ class AliyunTranslator(BaseTranslator):
         if not translated:
             raise RuntimeError("Aliyun returned an empty translation")
         return translated
+
+    def _one(self, text: str) -> str:
+        return self._rpc_one(text) if self.api_mode == "rpc" else self._rest_one(text)
 
     def do_translate(self, text, rate_limit_params: dict | None = None):
         if not text:
@@ -955,7 +1018,7 @@ def create_translator(provider_id: str, lang_in: str, lang_out: str, fallback_qp
         return BaiduTranslator(lang_in, lang_out, scope_id, qps, max_concurrency, app_id, endpoint,
                                auth_mode=auth_mode, secret_key=secret_key, api_key=api_key,
                                model_type=str(config.get("model_type") or "llm"), reference=str(config.get("reference") or ""),
-                               service_type=str(config.get("service_type") or ("machine" if auth_mode == "api_key" and str(config.get("model_type") or "llm").lower() == "nmt" else "llm" if auth_mode == "api_key" else "general")),
+                               service_type=str(config.get("service_type") or ("llm" if auth_mode == "api_key" else "general")),
                                domain=str(config.get("domain") or "academic"), ignore_cache=ignore_cache)
     if row.kind == "openai_compatible":
         api_key = str(secrets.get("api_key") or "").strip()
@@ -1015,10 +1078,13 @@ def create_translator(provider_id: str, lang_in: str, lang_out: str, fallback_qp
         sk = str(secrets.get("access_key_secret") or "").strip()
         if not ak or not sk:
             raise RuntimeError("阿里翻译需要 AccessKey ID 和 AccessKey Secret")
+        api_mode = str(config.get("api_mode") or ("rpc" if str(config.get("template_id") or "") == "aliyun_professional" else "rest")).strip().lower()
         return AliyunTranslator(lang_in, lang_out, scope_id, qps, max_concurrency,
                                 validate_outbound_url(str(config.get("endpoint") or "https://mt.cn-hangzhou.aliyuncs.com"), field="endpoint", resolve_dns=True), ak, sk,
                                 str(config.get("path") or "/api/translate/web/general"),
-                                str(config.get("scene") or "general"), int(config.get("max_chars") or 4900), ignore_cache=ignore_cache)
+                                str(config.get("scene") or ("description" if api_mode == "rpc" else "general")), int(config.get("max_chars") or 4900), ignore_cache=ignore_cache,
+                                api_mode=api_mode, action=str(config.get("action") or ("Translate" if api_mode == "rpc" else "TranslateGeneral")),
+                                context=str(config.get("context") or ""))
     raise RuntimeError(f"Unsupported translator provider kind: {row.kind}")
 
 

@@ -1,13 +1,39 @@
 const defaultBase = import.meta.env.VITE_API_BASE_URL || window.location.origin
 
+const DEVICE_COOKIE='zft_browser_device'
 function makeDeviceCode(){
   try { return crypto.randomUUID() } catch { return `web-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}` }
 }
+function readDeviceCookie(){
+  const prefix=`${DEVICE_COOKIE}=`
+  for(const part of document.cookie.split(';')){const item=part.trim();if(item.startsWith(prefix)){try{return decodeURIComponent(item.slice(prefix.length))}catch{return item.slice(prefix.length)}}}
+  return ''
+}
+function persistDeviceCode(value){
+  const v=String(value||'').trim();if(!v)return ''
+  localStorage.setItem('zft_device_code',v)
+  document.cookie=`${DEVICE_COOKIE}=${encodeURIComponent(v)}; Max-Age=315360000; Path=/; SameSite=Lax${location.protocol==='https:'?'; Secure':''}`
+  return v
+}
+function browserDeviceIdentity(){
+  // Cookie scope ignores ports. Preserve the pre-upgrade localStorage UUID as
+  // an alias before overwriting it, so the server can retire the duplicate
+  // device previously created by the other web portal.
+  const cookie=readDeviceCookie()
+  const legacy=[localStorage.getItem('zft_device_code'),localStorage.getItem('zft_admin_device_code')].map(v=>String(v||'').trim()).filter(Boolean)
+  const code=cookie||legacy[0]||makeDeviceCode()
+  const aliases=[...new Set(legacy.filter(v=>v!==code))]
+  persistDeviceCode(code)
+  return {code,aliases}
+}
+const DEVICE_IDENTITY=browserDeviceIdentity()
+
 
 export const settings = {
   get base(){ return localStorage.getItem('zft_api_base') || defaultBase },
   set base(v){ localStorage.setItem('zft_api_base', String(v||'').replace(/\/$/,'')) },
-  get deviceCode(){ let v=localStorage.getItem('zft_device_code'); if(!v){v=makeDeviceCode();localStorage.setItem('zft_device_code',v)} return v },
+  get deviceCode(){ return DEVICE_IDENTITY.code },
+  get deviceAliases(){ return DEVICE_IDENTITY.aliases },
   get theme(){ return localStorage.getItem('zft_theme') || 'system' },
   set theme(v){ localStorage.setItem('zft_theme',v) },
 }
@@ -23,12 +49,12 @@ export async function api(path, options={}){
 }
 
 export async function login(username,password){
-  const payload={username,password,device_code:settings.deviceCode,device_name:'Web portal',platform:navigator.platform||navigator.userAgent,app_version:'web-2.5.0'}
+  const payload={username,password,device_code:settings.deviceCode,device_aliases:settings.deviceAliases,device_name:'Web portal',platform:navigator.platform||navigator.userAgent,app_version:'web-2.5.2'}
   return api('/api/v1/auth/login',{method:'POST',body:JSON.stringify(payload)})
 }
 
 export async function register({username,password,email='',displayName=''}){
-  const payload={username,password,email:email||null,display_name:displayName||null,device_code:settings.deviceCode,device_name:'Web portal',platform:navigator.platform||navigator.userAgent,app_version:'web-2.5.0'}
+  const payload={username,password,email:email||null,display_name:displayName||null,device_code:settings.deviceCode,device_aliases:settings.deviceAliases,device_name:'Web portal',platform:navigator.platform||navigator.userAgent,app_version:'web-2.5.2'}
   return api('/api/v1/auth/register',{method:'POST',body:JSON.stringify(payload)})
 }
 

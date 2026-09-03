@@ -7,7 +7,7 @@ Browser ─ :3006 管理后台 ─┤        │
                            │        ├─ Account / API Keys / Usage
 Zotero ── :3005 API ──────┘        ├─ DOI Binding / TranslationVersion
                                     ├─ Result Assets / TM
-                                    └─ BabelDOC + 用户 Provider
+                                    └─ 版式翻译引擎 + 用户 Provider
 ```
 
 3005/3006 只是入口职责不同，API 权限始终由服务端 principal/role/scope 判断。

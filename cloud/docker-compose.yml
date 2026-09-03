@@ -7,7 +7,7 @@ services:
         VITE_ADMIN_API_BASE_URL: ""
         USER_FRONTEND_REV: ${ZFT_USER_FRONTEND_REV:-dev}
         ADMIN_FRONTEND_REV: ${ZFT_ADMIN_FRONTEND_REV:-dev}
-    image: zotero-full-translate-cloud:2.5.0
+    image: zotero-full-translate-cloud:2.5.2
     container_name: zotero-full-translate-cloud
     restart: unless-stopped
     env_file: .env
@@ -20,7 +20,7 @@ services:
       ZFT_ADMIN_PORT: ${ZFT_ADMIN_PORT:-3006}
     ports:
       - "${ZFT_BIND:-0.0.0.0}:${ZFT_PORT:-3005}:8089"
-      - "${ZFT_ADMIN_BIND:-127.0.0.1}:${ZFT_ADMIN_PORT:-3006}:8089"
+      - "${ZFT_ADMIN_BIND:-0.0.0.0}:${ZFT_ADMIN_PORT:-3006}:8089"
     security_opt:
       - no-new-privileges:true
     cap_drop:

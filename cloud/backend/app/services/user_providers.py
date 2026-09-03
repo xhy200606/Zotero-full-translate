@@ -51,16 +51,6 @@ PROVIDER_CATALOG: dict[str, dict] = {
         "docs_url": "https://fanyi-api.baidu.com/product/113",
         "config": _cfg(template_id="baidu_general", service_type="general", endpoint="https://fanyi-api.baidu.com/api/trans/vip/translate", auth_mode="sign", model_type="nmt", reference="", domain="academic", qps=10, max_concurrency=10),
     },
-    "baidu_machine": {
-        "kind": "baidu",
-        "vendor": "baidu",
-        "logo": "baidu",
-        "display_name": "百度机器翻译",
-        "description": "百度新文本翻译接口的机器翻译模型",
-        "credential_url": "https://fanyi-api.baidu.com/manage/apiKey",
-        "docs_url": "https://fanyi-api.baidu.com/doc/21",
-        "config": _cfg(template_id="baidu_machine", service_type="machine", endpoint="https://fanyi-api.baidu.com/ait/api/aiTextTranslate", auth_mode="api_key", model_type="nmt", reference="", domain="academic", qps=10, max_concurrency=10),
-    },
     "baidu_llm": {
         "kind": "baidu",
         "vendor": "baidu",
@@ -131,15 +121,27 @@ PROVIDER_CATALOG: dict[str, dict] = {
         "docs_url": "https://help.aliyun.com/product/30396.html",
         "config": _cfg(template_id="aliyun_general", endpoint="https://mt.cn-hangzhou.aliyuncs.com", path="/api/translate/web/general", scene="general", max_chars=4900, qps=10, max_concurrency=10),
     },
+    "aliyun_professional": {
+        "kind": "aliyun",
+        "vendor": "aliyun",
+        "logo": "aliyun",
+        "display_name": "阿里云机器翻译专业版",
+        "description": "阿里云机器翻译专业版 Translate 引擎（2018-10-12）",
+        "credential_url": "https://ram.console.aliyun.com/manage/ak",
+        "docs_url": "https://help.aliyun.com/zh/machine-translation/developer-reference/api-alimt-2018-10-12-translate",
+        "config": _cfg(template_id="aliyun_professional", api_mode="rpc", action="Translate", endpoint="https://mt.cn-hangzhou.aliyuncs.com", scene="description", context="", max_chars=4900, qps=50, max_concurrency=10),
+    },
 }
 
 
 PROVIDER_TEMPLATES: dict[str, dict] = {
     "openai_compatible": PROVIDER_CATALOG["openai_compatible"],
     "baidu": PROVIDER_CATALOG["baidu_general"],
+    "baidu_llm": PROVIDER_CATALOG["baidu_llm"],
     "tencent": PROVIDER_CATALOG["tencent_tmt"],
     "volcengine": PROVIDER_CATALOG["volcengine_mt"],
     "aliyun": PROVIDER_CATALOG["aliyun_general"],
+    "aliyun_professional": PROVIDER_CATALOG["aliyun_professional"],
 }
 
 
@@ -158,8 +160,7 @@ def provider_metadata(row: UserProviderProfile) -> dict:
             service_type = str(config.get("service_type") or "").lower()
             if not service_type:
                 mode = str(config.get("auth_mode") or "sign").lower()
-                model = str(config.get("model_type") or "nmt").lower()
-                service_type = "llm" if mode == "api_key" and model == "llm" else "machine" if mode == "api_key" else "general"
+                service_type = "llm" if mode == "api_key" else "general"
             template_id = f"baidu_{service_type}"
         elif row.provider_id == "tencent":
             mode = str(config.get("auth_mode") or "tmt_tc3").lower()
@@ -182,11 +183,49 @@ def provider_metadata(row: UserProviderProfile) -> dict:
 
 
 def ensure_user_provider_defaults(db: Session, user_id: str) -> list[UserProviderProfile]:
-    existing = {
-        row.provider_id: row
-        for row in db.scalars(select(UserProviderProfile).where(UserProviderProfile.user_id == user_id)).all()
-    }
+    rows = list(db.scalars(select(UserProviderProfile).where(UserProviderProfile.user_id == user_id)).all())
+    settings = db.get(UserTranslationSettings, user_id)
     changed = False
+
+    baidu_llm_row = next((row for row in rows if row.provider_id == "baidu_llm"), None)
+    for row in list(rows):
+        cfg = dict(row.config or {})
+        is_legacy_machine = (
+            row.kind == "baidu"
+            and (
+                row.provider_id == "baidu_machine"
+                or str(cfg.get("template_id") or "").strip() == "baidu_machine"
+                or str(cfg.get("service_type") or "").strip().lower() == "machine"
+            )
+        )
+        if not is_legacy_machine:
+            continue
+        cfg.update({
+            "template_id": "baidu_llm",
+            "service_type": "llm",
+            "auth_mode": "api_key",
+            "model_type": "llm",
+            "endpoint": "https://fanyi-api.baidu.com/ait/api/aiTextTranslate",
+        })
+        row.config = cfg
+        if "机器翻译" in str(row.display_name or "") or not str(row.display_name or "").strip():
+            row.display_name = PROVIDER_CATALOG["baidu_llm"]["display_name"]
+        if row.provider_id == "baidu_machine" and baidu_llm_row is None:
+            row.provider_id = "baidu_llm"
+            baidu_llm_row = row
+        changed = True
+
+    if settings is not None:
+        pool = []
+        for provider_id in list(settings.default_provider_ids or []):
+            normalized = "baidu_llm" if provider_id == "baidu_machine" else provider_id
+            if normalized not in pool:
+                pool.append(normalized)
+        if pool != list(settings.default_provider_ids or []):
+            settings.default_provider_ids = pool
+            changed = True
+
+    existing = {row.provider_id: row for row in rows}
     for provider_id, template in PROVIDER_TEMPLATES.items():
         row = existing.get(provider_id)
         if row is None:
@@ -201,15 +240,17 @@ def ensure_user_provider_defaults(db: Session, user_id: str) -> list[UserProvide
             )
             db.add(row)
             existing[provider_id] = row
+            rows.append(row)
             changed = True
         else:
             cfg = dict(row.config or {})
             if provider_id == "baidu" and not cfg.get("service_type"):
                 mode = str(cfg.get("auth_mode") or "sign").lower()
-                model = str(cfg.get("model_type") or "nmt").lower()
-                service = "llm" if mode == "api_key" and model == "llm" else "machine" if mode == "api_key" else "general"
+                service = "llm" if mode == "api_key" else "general"
                 cfg["service_type"] = service
                 cfg["template_id"] = f"baidu_{service}"
+                if service == "llm":
+                    cfg["model_type"] = "llm"
                 row.config = cfg
                 if row.display_name == "百度翻译":
                     row.display_name = PROVIDER_CATALOG[f"baidu_{service}"]["display_name"]
@@ -220,7 +261,7 @@ def ensure_user_provider_defaults(db: Session, user_id: str) -> list[UserProvide
                     cfg["template_id"] = meta["template_id"]
                     row.config = cfg
                     changed = True
-    settings = db.get(UserTranslationSettings, user_id)
+
     if settings is None:
         settings = UserTranslationSettings(user_id=user_id, default_provider_ids=[], default_provider_strategy="balanced")
         db.add(settings)

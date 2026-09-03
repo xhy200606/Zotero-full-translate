@@ -39,7 +39,7 @@ with TestClient(app) as client:
     catalog = client.get('/api/v1/account/providers/catalog')
     assert catalog.status_code == 200, catalog.text
     ids = {x['template_id'] for x in catalog.json()}
-    for expected in ('baidu_general','baidu_machine','baidu_domain','baidu_llm','custom_openai_compatible'):
+    for expected in ('baidu_general','baidu_domain','baidu_llm','custom_openai_compatible'):
         assert expected in ids, (expected, ids)
 
     created = client.post('/api/v1/account/providers', json={'template_id':'baidu_domain'})
@@ -69,6 +69,6 @@ assert body['model_type'] == 'nmt' and headers['Authorization'] == 'Bearer key'
 
 for index in ('user-frontend/index.html','admin-frontend/index.html'):
     text=(Path(__file__).resolve().parents[1]/index).read_text()
-    assert '/favicon.svg' in text
+    assert '/zft-brand-icon.svg' in text
 
 print('provider-catalog-security-smoke: ok')

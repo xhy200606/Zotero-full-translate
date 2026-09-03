@@ -47,7 +47,7 @@ CONFIG_FIELDS = {
     "openai_compatible": {"base_url", "model", "qps", "max_concurrency", "quota_enabled", "quota_total_chars", "quota_reserve_chars", "quota_low_percent", "quota_period"},
     "tencent": {"auth_mode", "tmt_endpoint", "tmt_region", "tmt_version", "project_id", "max_chars", "base_url", "model", "hunyuan_endpoint", "hunyuan_model", "field", "qps", "max_concurrency", "quota_enabled", "quota_total_chars", "quota_reserve_chars", "quota_low_percent", "quota_period"},
     "volcengine": {"endpoint", "resource_id", "qps", "max_concurrency", "quota_enabled", "quota_total_chars", "quota_reserve_chars", "quota_low_percent", "quota_period"},
-    "aliyun": {"endpoint", "path", "scene", "max_chars", "qps", "max_concurrency", "quota_enabled", "quota_total_chars", "quota_reserve_chars", "quota_low_percent", "quota_period"},
+    "aliyun": {"endpoint", "path", "api_mode", "action", "scene", "context", "max_chars", "qps", "max_concurrency", "quota_enabled", "quota_total_chars", "quota_reserve_chars", "quota_low_percent", "quota_period"},
 }
 
 
@@ -158,12 +158,14 @@ def _normalize_config(row: UserProviderProfile, payload: ProviderUpdate) -> None
             merged["quota_period"] = "account" if str(merged.get("quota_period") or "month").lower() == "account" else "month"
         if row.kind == "baidu":
             service_type = str(merged.get("service_type") or "general").lower()
-            if service_type not in {"general", "machine", "llm", "domain"}:
+            if service_type == "machine":
+                service_type = "llm"
+            if service_type not in {"general", "llm", "domain"}:
                 service_type = "general"
             merged["service_type"] = service_type
-            if service_type in {"machine", "llm"}:
+            if service_type == "llm":
                 merged["auth_mode"] = "api_key"
-                merged["model_type"] = "nmt" if service_type == "machine" else "llm"
+                merged["model_type"] = "llm"
                 merged["endpoint"] = str(merged.get("endpoint") or "https://fanyi-api.baidu.com/ait/api/aiTextTranslate").strip()
             elif service_type == "domain":
                 merged["auth_mode"] = "sign"
@@ -191,6 +193,20 @@ def _normalize_config(row: UserProviderProfile, payload: ProviderUpdate) -> None
         if row.kind == "volcengine":
             merged["endpoint"] = str(merged.get("endpoint") or "https://openspeech.bytedance.com/api/v3/machine_translation/matx_translate").strip()
             merged["resource_id"] = str(merged.get("resource_id") or "volc.speech.mt").strip()
+        if row.kind == "aliyun":
+            mode = str(merged.get("api_mode") or ("rpc" if str(merged.get("template_id") or "") == "aliyun_professional" else "rest")).strip().lower()
+            merged["api_mode"] = mode if mode in {"rest", "rpc"} else "rest"
+            merged["endpoint"] = str(merged.get("endpoint") or "https://mt.cn-hangzhou.aliyuncs.com").strip()
+            if merged["api_mode"] == "rpc":
+                merged["action"] = "Translate"
+                merged["scene"] = str(merged.get("scene") or "description").strip().lower()
+                if merged["scene"] not in {"title", "description", "communication", "medical", "social", "finance"}:
+                    merged["scene"] = "description"
+                merged["context"] = str(merged.get("context") or "").strip()[:2000]
+            else:
+                merged["path"] = str(merged.get("path") or "/api/translate/web/general").strip()
+                merged["scene"] = str(merged.get("scene") or "general").strip()
+            merged["max_chars"] = max(500, min(4900, int(merged.get("max_chars") or 4900)))
         _validate_provider_urls(row.kind, merged)
         row.config = merged
     if payload.secrets is not None:

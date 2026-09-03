@@ -40,4 +40,4 @@ user_app = (ROOT / "user-frontend/src/App.jsx").read_text(encoding="utf-8")
 for needle in ["今日调用次数", "今日调用字节", "今日缓存复用", "Zotero API Key", "有效客户端", "翻译 API", "默认翻译池"]:
     assert needle in user_app, needle
 
-print("zft-cloud-v2.5.0-smoke: ok")
+print("zft-cloud-v2.5.2-smoke: ok")

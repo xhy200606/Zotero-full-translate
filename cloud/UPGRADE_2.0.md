@@ -1,4 +1,4 @@
-# 升级到 Cloud 2.5.0 / Zotero 0.3.7
+# 升级到 Cloud 2.5.2 / Zotero 0.4.1
 
 2.3 的核心变化：DOI-only 文献身份、TranslationVersion 原子绑定、API Key scope/expiry/rotation、HttpOnly Web session、自定义 Provider Profile、Alembic 和 SQLite WAL。
 
@@ -52,7 +52,7 @@ cd cloud
 
 ## 6. Zotero API Key
 
-Zotero `0.3.7` 继续只配置：
+Zotero `0.4.1` 继续只配置：
 
 ```text
 Cloud 地址
@@ -120,7 +120,7 @@ docker compose build --no-cache
 2.5 增加 Provider 模板目录、百度机器/大模型/领域文本翻译、翻译 API 卡片式配置、Zotero 客户端合并页面和浏览器 favicon。升级后建议在生产 `.env` 增加：
 
 ```env
-ZFT_ADMIN_BIND=127.0.0.1
+ZFT_ADMIN_BIND=0.0.0.0
 ZFT_PUBLIC_HARDENING=true
 ZFT_ALLOWED_HOSTS=translate.example.com
 ZFT_EXPOSE_API_DOCS=false
@@ -129,5 +129,5 @@ ZFT_ALLOW_PRIVATE_PROVIDER_ENDPOINTS=false
 ZFT_ALLOW_INSECURE_PROVIDER_HTTP=false
 ```
 
-如果使用反向代理，请把 `ZFT_CORS_ORIGINS` 改为真实 HTTPS Origin。若历史部署直接把 3006 暴露公网，升级后默认只绑定 localhost；请通过反向代理转发管理域名，或在明确理解风险时修改 `ZFT_ADMIN_BIND`。
+如果使用反向代理，请把 `ZFT_CORS_ORIGINS` 改为真实 HTTPS Origin。3006 默认发布到 `0.0.0.0`，可直接通过服务器 IP:3006 访问管理端；生产环境建议同时通过主机防火墙/云安全组限制来源，或使用 HTTPS 反向代理。
 

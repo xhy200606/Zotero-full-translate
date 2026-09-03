@@ -5,7 +5,7 @@ ROOT = Path(__file__).resolve().parents[1]
 compose = yaml.safe_load((ROOT / 'docker-compose.yml').read_text())
 services = compose.get('services') or {}
 assert list(services) == ['zft'], services
-assert services['zft']['ports'] == ['${ZFT_BIND:-0.0.0.0}:${ZFT_PORT:-3005}:8089', '${ZFT_ADMIN_BIND:-127.0.0.1}:${ZFT_ADMIN_PORT:-3006}:8089']
+assert services['zft']['ports'] == ['${ZFT_BIND:-0.0.0.0}:${ZFT_PORT:-3005}:8089', '${ZFT_ADMIN_BIND:-0.0.0.0}:${ZFT_ADMIN_PORT:-3006}:8089']
 assert services['zft']['security_opt'] == ['no-new-privileges:true']
 assert services['zft']['cap_drop'] == ['ALL']
 assert services['zft']['environment']['ZFT_ADMIN_STATIC_DIR'] == '/app/static/admin'

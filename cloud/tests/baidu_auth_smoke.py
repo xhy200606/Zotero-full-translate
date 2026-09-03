@@ -11,7 +11,8 @@ assert '不要把“API Key管理”生成的 API Key 填到密钥字段' in pro
 assert '{"app_id", "secret_key", "api_key"}' in api
 assert 'APPID' in ui and 'Secret Key' in ui
 assert 'API Key' in ui and '翻译领域' in ui
-assert 'baidu_machine' in (root/'backend/app/services/user_providers.py').read_text()
+assert '"baidu_machine": {' not in (root/'backend/app/services/user_providers.py').read_text()
+assert '"baidu_llm": {' in (root/'backend/app/services/user_providers.py').read_text()
 assert 'baidu_domain' in (root/'backend/app/services/user_providers.py').read_text()
 assert 'fieldtranslate' in providers and 'service_type' in providers
 print('baidu-auth-smoke: ok')

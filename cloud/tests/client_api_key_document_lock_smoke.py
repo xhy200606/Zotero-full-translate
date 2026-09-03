@@ -35,7 +35,7 @@ DOI = "10.1234/example.paper.2026"
 def bearer(token: str, device: str | None = None):
     h = {"Authorization": f"Bearer {token}"}
     if device:
-        h.update({"X-ZFT-Device-ID": device, "X-ZFT-Platform": "test", "X-ZFT-Client-Version": "0.3.7"})
+        h.update({"X-ZFT-Device-ID": device, "X-ZFT-Platform": "test", "X-ZFT-Client-Version": "0.4.1"})
     return h
 
 

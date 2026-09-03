@@ -32,7 +32,7 @@ DOI = "10.5555/zft.multiuser.2026"
 
 
 def api_auth(key, device="zotero-device"):
-    return {"Authorization": f"Bearer {key}", "X-ZFT-Device-ID": device, "X-ZFT-Client-Version":"0.3.7"}
+    return {"Authorization": f"Bearer {key}", "X-ZFT-Device-ID": device, "X-ZFT-Client-Version":"0.4.1"}
 
 
 def login(client, username, password="password-12345"):

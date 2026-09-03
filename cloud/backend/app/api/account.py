@@ -5,10 +5,13 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import desc, func, or_, select
 from sqlalchemy.orm import Session
 
-from ..auth import (AuthPrincipal, issue_client_api_key, normalize_scopes, require_web_session, revoke_client_api_key, revoke_device_sessions, utcnow)
+from ..auth import (AuthPrincipal, device_is_active, issue_client_api_key, normalize_scopes, require_client_scope, require_web_session, revoke_client_api_key, revoke_device_sessions, utcnow)
 from ..db import get_db
-from ..models import ClientApiKey, Device, Job, UsageEvent
-from ..schemas import (AccountSummary, ClientApiKeyCreateRequest, ClientApiKeyCreatedOut, ClientApiKeyOut, ClientApiKeyRotateRequest, DeviceOut, DeviceUpdateRequest, JobOut, UsageSummary, UserPublic)
+from ..models import ClientApiKey, Device, Job, RuntimeConfig, UsageEvent
+from ..schemas import (AccountSummary, ClientApiKeyCreateRequest, ClientApiKeyCreatedOut, ClientApiKeyOut, ClientApiKeyRotateRequest, ClientProviderInstanceOut, ClientProviderPoolOut, DeviceOut, DeviceUpdateRequest, JobOut, UsageSummary, UserPublic)
+from ..services.providers import provider_is_configured
+from ..services.quota import quota_manager
+from ..services.user_providers import ensure_user_provider_defaults, get_user_translation_settings, provider_metadata
 from ..services.usage import day_bounds, usage_summary
 
 router = APIRouter(prefix="/api/v1/account", tags=["account"])
@@ -30,8 +33,9 @@ def account_summary(principal: AuthPrincipal = Depends(require_web_session), db:
     today = usage_summary(db, user_id=user_id)
     total_jobs = int(db.scalar(select(func.count()).select_from(Job).where(Job.user_id == user_id)) or 0)
     total_cache_hits = int(db.scalar(select(func.count()).select_from(Job).where(Job.user_id == user_id, Job.cache_hit.is_(True))) or 0)
-    device_count = int(db.scalar(select(func.count()).select_from(Device).where(Device.user_id == user_id, Device.revoked.is_(False))) or 0)
     now = utcnow()
+    device_rows = db.scalars(select(Device).where(Device.user_id == user_id, Device.revoked.is_(False))).all()
+    device_count = sum(1 for device in device_rows if device_is_active(db, device, now=now))
     api_key_count = int(db.scalar(select(func.count()).select_from(ClientApiKey).where(
         ClientApiKey.user_id == user_id,
         ClientApiKey.revoked_at.is_(None),
@@ -51,8 +55,10 @@ def account_summary(principal: AuthPrincipal = Depends(require_web_session), db:
 
 @router.get("/devices", response_model=list[DeviceOut])
 def account_devices(principal: AuthPrincipal = Depends(require_web_session), db: Session = Depends(get_db)):
+    now = utcnow()
     rows = db.scalars(select(Device).where(Device.user_id == principal.user.id, Device.revoked.is_(False)).order_by(desc(Device.last_seen_at))).all()
-    return [DeviceOut.model_validate(x).model_copy(update={"current": principal.device_id == x.id}) for x in rows]
+    active = [x for x in rows if device_is_active(db, x, now=now)]
+    return [DeviceOut.model_validate(x).model_copy(update={"current": principal.device_id == x.id}) for x in active]
 
 
 @router.patch("/devices/{device_id}", response_model=DeviceOut)
@@ -81,6 +87,70 @@ def revoke_device(device_id: str, principal: AuthPrincipal = Depends(require_web
         raise HTTPException(status_code=409, detail="cannot revoke the current device from this session")
     revoke_device_sessions(db, device)
     return {"ok": True}
+
+
+@router.get("/provider-pool", response_model=ClientProviderPoolOut)
+def client_provider_pool(
+    principal: AuthPrincipal = Depends(require_client_scope("translate")),
+    db: Session = Depends(get_db),
+):
+    if not principal.user_id:
+        raise HTTPException(status_code=401, detail="account authentication required")
+    rows = ensure_user_provider_defaults(db, principal.user_id)
+    settings = get_user_translation_settings(db, principal.user_id)
+    default_ids = [str(x) for x in list(settings.default_provider_ids or []) if str(x).strip()]
+    runtime = db.get(RuntimeConfig, 1)
+    fallback_qps = float(getattr(runtime, "babeldoc_qps", 1) or 1)
+    items: list[ClientProviderInstanceOut] = []
+    for row in rows:
+        if not row.enabled or not provider_is_configured(row):
+            continue
+        config = dict(row.config or {})
+        meta = provider_metadata(row)
+        try:
+            qps = max(0.1, float(config.get("qps") or fallback_qps))
+        except Exception:
+            qps = max(0.1, fallback_qps)
+        try:
+            max_concurrency = max(1, int(config.get("max_concurrency") or 1))
+        except Exception:
+            max_concurrency = 1
+        quota = quota_manager.snapshot(f"user:{principal.user_id}:{row.provider_id}", config)
+        items.append(ClientProviderInstanceOut(
+            id=row.provider_id,
+            kind=row.kind,
+            display_name=row.display_name,
+            vendor=meta.get("vendor"),
+            template_id=meta.get("template_id"),
+            qps=qps,
+            max_concurrency=max_concurrency,
+            quota_status=str(quota.get("status") or "normal"),
+            quota_enabled=bool(quota.get("enabled", True)),
+            quota_period=str(quota.get("period") or "month"),
+            quota_total_chars=quota.get("total_chars"),
+            quota_used_chars=quota.get("used_chars"),
+            quota_remaining_chars=quota.get("remaining_chars"),
+            quota_remaining_percent=quota.get("remaining_percent"),
+            quota_reserve_chars=int(quota.get("reserve_chars") or 0),
+            quota_low_percent=float(quota.get("low_percent") or 10.0),
+            quota_reset_at=quota.get("reset_at"),
+            last_test_ok=row.last_test_ok,
+            selected_by_default=row.provider_id in default_ids,
+        ))
+    usable_ids = {item.id for item in items}
+    effective_defaults = [pid for pid in default_ids if pid in usable_ids]
+    if not effective_defaults:
+        effective_defaults = [item.id for item in items]
+    strategy = str(settings.default_provider_strategy or "balanced").strip().lower()
+    if len(effective_defaults) <= 1:
+        strategy = "single"
+    elif strategy not in {"balanced", "failover"}:
+        strategy = "balanced"
+    return ClientProviderPoolOut(
+        items=items,
+        default_provider_ids=effective_defaults,
+        default_provider_strategy=strategy,
+    )
 
 
 @router.get("/usage")

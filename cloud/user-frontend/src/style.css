@@ -370,7 +370,7 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid 
 @media(min-width:1200px){.provider-card-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:599px){.provider-summary-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.provider-settings-intro{grid-template-columns:auto minmax(0,1fr)}.provider-settings-intro>.provider-toggle{grid-column:1/-1}.dialog-actions{align-items:stretch;flex-direction:column}.dialog-actions .md-button{width:100%}.dialog-actions .provider-message{margin:0}.provider-info-card{padding:16px}.provider-pool-footer{align-items:stretch}.provider-pool-footer .compact-select{width:100%}}
 
-/* 2.5.0 UI density + task progress refresh */
+/* 2.5.2 UI density + task progress refresh */
 .app-brand-logo{width:44px;height:44px;border-radius:14px;display:grid;place-items:center;flex:none;background:var(--md-sys-color-primary-container);color:var(--md-sys-color-on-primary-container);overflow:hidden}
 .app-brand-logo.compact{width:48px;height:48px;border-radius:16px;margin-bottom:12px}
 .app-brand-logo svg{width:40px;height:40px;overflow:visible}
@@ -464,3 +464,6 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid 
   .active-job-head>.status-chip{max-width:100%;width:max-content}
 }
 .brand-block .app-brand-logo{display:grid;color:var(--md-sys-color-on-primary-container);margin-top:0;font-size:initial}
+.provider-catalog-grid.compact-catalog .catalog-card{min-height:72px;align-items:center}
+.provider-catalog-grid.compact-catalog .catalog-card>span:not(.catalog-check){display:flex;align-items:center}
+.provider-catalog-grid.compact-catalog .catalog-card small{display:none}

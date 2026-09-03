@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import desc, func, or_, select
 from sqlalchemy.orm import Session
 
-from ..auth import AuthPrincipal, hash_password, normalize_username, require_admin, utcnow
+from ..auth import AuthPrincipal, device_is_active, hash_password, normalize_username, require_admin, utcnow
 from ..db import get_db
 from ..models import AuthToken, ClientApiKey, Device, Job, UsageEvent, User
 from ..schemas import (
@@ -89,7 +89,9 @@ def list_users(
     out = []
     for user in users:
         today = usage_summary(db, user_id=user.id, start=start, end=end)
-        devices = int(db.scalar(select(func.count()).select_from(Device).where(Device.user_id == user.id, Device.revoked.is_(False))) or 0)
+        now_for_devices = utcnow()
+        device_rows = db.scalars(select(Device).where(Device.user_id == user.id, Device.revoked.is_(False))).all()
+        devices = sum(1 for device in device_rows if device_is_active(db, device, now=now_for_devices))
         api_keys = int(db.scalar(select(func.count()).select_from(ClientApiKey).where(
             ClientApiKey.user_id == user.id, ClientApiKey.revoked_at.is_(None),
             or_(ClientApiKey.expires_at.is_(None), ClientApiKey.expires_at > utcnow()),
@@ -195,14 +197,15 @@ def user_detail(
             date=data["date"], calls=data["calls"], bytes=data["total_bytes"],
             cache_hits=data["cache_hits"], jobs=data["jobs"],
         ))
+    active_devices = [d for d in devices if device_is_active(db, d)]
     return AdminUserDetail(
         user=UserPublic.model_validate(user),
         today=UsageSummary(**{k: today[k] for k in UsageSummary.model_fields}),
-        device_count=len([d for d in devices if not d.revoked]),
+        device_count=len(active_devices),
         api_key_count=api_key_count,
         total_jobs=total_jobs,
         total_cache_hits=total_cache_hits,
-        devices=[DeviceOut.model_validate(d) for d in devices],
+        devices=[DeviceOut.model_validate(d) for d in active_devices],
         recent_jobs=[_job_out(j) for j in recent],
         usage=points,
     )

@@ -1,4 +1,4 @@
-# Zotero-full-translate Cloud 2.5.0 API
+# Zotero-full-translate Cloud 2.5.2 API
 
 ## 认证模型
 
@@ -26,7 +26,7 @@ POST /api/v1/auth/change-password
 ```http
 Authorization: Bearer zftk_...
 X-ZFT-Device-ID: <persistent-random-uuid>
-X-ZFT-Client-Version: 0.3.7
+X-ZFT-Client-Version: 0.4.1
 ```
 
 验证当前 Key：
@@ -98,9 +98,17 @@ GET    /api/v1/account/providers/settings/default
 PUT    /api/v1/account/providers/settings/default
 ```
 
-`/catalog` 返回可创建模板的 `template_id`、厂商标识、说明、凭据入口和默认配置。创建时推荐提交 `template_id`，例如 `baidu_general`、`baidu_machine`、`baidu_llm`、`baidu_domain`、`tencent_tmt`、`volcengine_mt`、`aliyun_general` 或 `custom_openai_compatible`。
+`/catalog` 返回可创建模板的 `template_id`、厂商标识、说明、凭据入口和默认配置。创建时推荐提交 `template_id`，例如 `baidu_general`、`baidu_llm`、`baidu_domain`、`tencent_tmt`、`volcengine_mt`、`aliyun_general`、`aliyun_professional` 或 `custom_openai_compatible`。
 
-用户可以维护内置或自定义 Profile。配置按 `user_id + provider_id` 隔离；Provider secret 加密保存。默认设置支持 single、balanced、failover。Provider 返回实时 QPS、最近 60 秒请求/错误、今日翻译字符和额度状态；额度计数可以由当前用户重置。测试接口先持久化当前配置，再执行真实短文本翻译请求。自定义 endpoint 默认必须是 HTTPS 公网地址。
+用户可以维护内置或自定义 Profile。配置按 `user_id + provider_id` 隔离；Provider secret 加密保存。同一模板可以创建多个独立 Profile，因此两个百度账号、两个阿里云账号等不会按厂商类型合并。默认设置支持 single、balanced、failover。Provider 返回实时 QPS、最近 60 秒请求/错误、今日翻译字符和额度状态；额度计数可以由当前用户重置。测试接口先持久化当前配置，再执行真实短文本翻译请求。自定义 endpoint 默认必须是 HTTPS 公网地址。
+
+Zotero 客户端使用 `translate` scope 可读取当前账户的可用 API 实例池：
+
+```text
+GET /api/v1/account/provider-pool
+```
+
+响应仅包含已启用且已配置的实例元数据、默认实例 ID 与调度策略，不返回任何 Provider secret。同一厂商的多个实例会分别返回各自的 `id` 与 `display_name`。每个实例同时返回额度状态、总额度、已用字符、剩余字符、剩余百分比与低额度阈值，供 Zotero 0.4.2 显示剩余额度和低额度警告。
 
 ## DOI 文献 lookup
 
@@ -154,7 +162,7 @@ force_retranslate=false
 
 当 `force_retranslate=false` 且 DOI 有可复用全局结果时，Cloud 可以在 Provider 可用性检查前生成当前用户的缓存复用 Job。DOI 是公开元数据，服务端不会验证上传 PDF 字节确实对应该 DOI；这是 DOI-only 策略的已知取舍。
 
-`force_retranslate=true` 绕过文档级可复用结果、Translation Memory 读取和 BabelDOC cache；成功后才更新当前用户 binding。
+`force_retranslate=true` 绕过文档级可复用结果、Translation Memory 读取和版式翻译缓存；成功后才更新当前用户 binding。
 
 ## Job 与结果
 

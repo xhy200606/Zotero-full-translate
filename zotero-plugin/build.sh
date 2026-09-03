@@ -9,7 +9,7 @@ PY
 mkdir -p dist
 OUT="dist/Zotero-full-translate-v${VERSION}.xpi"
 rm -f "$OUT"
-zip -q -r "$OUT" \
+zip -X -q -r "$OUT" \
   bootstrap.js chrome.manifest manifest.json prefs.js LICENSE \
-  chrome locale
+  chrome
 echo "$OUT"

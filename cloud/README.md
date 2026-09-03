@@ -1,11 +1,11 @@
-# Zotero-full-translate Cloud 2.5.0
+# Zotero-full-translate Cloud 2.5.2
 
-Cloud 提供账户体系、HttpOnly Web session、Zotero API Key、用户级翻译 Provider、BabelDOC 任务、DOI 文献绑定、翻译版本、共享译文资产、结果下载和用量统计。
+Cloud 提供账户体系、HttpOnly Web session、Zotero API Key、用户级翻译 API 实例池、全文翻译任务、DOI 文献绑定、翻译版本、共享译文资产、结果下载和用量统计。
 
 ## 端口
 
 - `3005`：普通用户注册/登录、Zotero 客户端（API Key + 客户端实例）、个人 Provider、个人统计和任务。
-- `3006`：管理员登录、用户管理、全局统计和系统状态；Docker 默认只绑定 `127.0.0.1`，推荐通过 HTTPS 反向代理访问。
+- `3006`：管理员登录、用户管理、全局统计和系统状态；默认发布到 `0.0.0.0:3006`。公网部署请配合主机防火墙/安全组限制来源，并优先使用 HTTPS 反向代理。
 
 两个端口映射同一个 FastAPI 容器；服务端根据 Host/forwarded port 选择 SPA，权限仍由服务端鉴权。
 
@@ -17,6 +17,8 @@ openssl rand -hex 32
 ```
 
 将随机值写入 `ZFT_CONFIG_SECRET`。它用于加密每个用户的 Provider secret，部署后必须保持稳定。
+
+从旧版本升级时，`scripts/update.sh` / `scripts/rebuild.sh` 会检查该变量：若旧 `.env` 缺失或仍为示例占位值，脚本会先尝试从正在运行的旧容器恢复原值；确实没有旧值时才首次生成随机密钥并写入 `.env`。已有有效值永远不会被脚本自动轮换。
 
 `ZFT_API_KEY` 是可选的旧服务自动化/恢复兼容密钥，不是 Zotero 普通用户 Key，可以留空。
 
@@ -75,9 +77,9 @@ Cloud 为 mono/dual 译文保存 `mono_sha256` / `dual_sha256`，下载响应返
 
 ## 用户独立 Provider
 
-每个普通用户在 3005 维护自己的 Provider Profile。翻译 API 页面本身就是服务总览：每张卡片显示厂商标识、配置状态、实时 QPS、最近 60 秒请求/错误、今日字符和额度；右上角设置按钮打开配置对话框。
+每个普通用户在 3005 维护自己的 Provider Profile。每张 API 卡片都是一个独立实例；同一厂商、同一模板可以创建多个账号实例，并分别保存名称、凭据、QPS、额度与健康状态，同时参与负载均衡或主备调度。翻译 API 页面本身就是服务总览：每张卡片显示厂商标识、配置状态、实时 QPS、最近 60 秒请求/错误、今日字符和额度；右上角设置按钮打开配置对话框。
 
-“新增翻译 API”从 Provider 目录选择现成模板，也可创建自定义 OpenAI-compatible Profile。当前目录包括 OpenAI Compatible、百度通用文本翻译、百度机器翻译、百度大模型文本翻译、百度领域文本翻译、腾讯 TMT/TokenHub/混元、火山机器翻译和阿里机器翻译。百度领域翻译可选择学术论文、生物医药、IT、金融、机械、小说、新闻、人文社科、航空航天、法律、合同等领域。
+“新增翻译 API”从 Provider 目录选择现成模板，也可创建自定义 OpenAI-compatible Profile。当前目录包括 OpenAI Compatible、百度通用文本翻译、百度大模型文本翻译、百度领域文本翻译、腾讯 TMT/TokenHub/混元、火山机器翻译、阿里云机器翻译通用版和阿里云机器翻译专业版。阿里云专业版使用 `alimt/2018-10-12` 的 `Translate` 接口，可选择商品标题、商品描述、商品沟通、医疗、社交、金融场景。百度领域翻译可选择学术论文、生物医药、IT、金融、机械、小说、新闻、人文社科、航空航天、法律、合同等领域。
 
 API secret 输入旁提供厂商“获取 API”入口。Provider secret 使用 `ZFT_CONFIG_SECRET` 加密保存。支持 single、balanced、failover 选择策略；管理员 3006 不统一维护普通用户 secret。Provider“测试连接”会先保存当前表单，再发起真实短文本翻译测试。
 
@@ -91,7 +93,7 @@ Cloud 2.5 默认启用 `ZFT_PUBLIC_HARDENING=true`。公网环境建议至少配
 
 ```env
 ZFT_BIND=0.0.0.0
-ZFT_ADMIN_BIND=127.0.0.1
+ZFT_ADMIN_BIND=0.0.0.0
 ZFT_ALLOWED_HOSTS=translate.example.com
 ZFT_CORS_ORIGINS=https://translate.example.com
 ZFT_EXPOSE_API_DOCS=false

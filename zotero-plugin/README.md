@@ -1,33 +1,33 @@
-# Zotero-full-translate Zotero 插件
+# Zotero Full Translate 0.4.2
 
-这是 Zotero 10 客户端插件源码。它作为 Cloud thin client，负责：
+Zotero 全文 PDF 翻译客户端，配套 Zotero Full Translate Cloud 2.5.2。
 
-- 提交 PDF 翻译任务并显示进度；
-- 任务取消、恢复、历史复用与强制重新翻译；
-- 下载译文 PDF 并挂载为 Zotero 附件；
-- 原文/译文左右对照与联动滚动。
+## 主要功能
+
+- 从 Zotero Reader 一键提交全文翻译任务。
+- Cloud 生成固定版式译文 PDF，并统一执行翻译 API 调度。
+- Reader 内显示翻译阶段、进度与任务状态，可取消或恢复任务。
+- 翻译完成后自动下载并挂载译文附件。
+- 支持原文 / 译文左右对照与联动滚动。
+- 支持按 DOI 复用账户已有译文与跨设备绑定。
+- Zotero 可读取 Cloud 当前可用的 API 实例池；同一厂商的多个账号会作为多个独立实例参与选择与调度。
+- 设置页显示每个已启用 API 实例的剩余额度；Reader 工具栏仅在当前调度实例进入低额度阈值时显示警告。
+- Zotero 仅保存 Cloud 地址和账户 API Key；翻译服务密钥保存在 Cloud 账户侧。
+
+## 连接 Cloud
+
+在 Cloud `3005` 用户中心创建 `zftk_...` API Key，然后在插件“连接”设置中填写 Cloud 地址和账户 API Key，点击“验证并连接”。
 
 ## 构建
 
 ```bash
-chmod +x build.sh
 ./build.sh
 ```
 
-生成文件位于 `dist/`。
+生成：
 
-## 安装
+```text
+dist/Zotero-full-translate-v0.4.2.xpi
+```
 
-Zotero → 工具 → 插件 → 齿轮 → 从文件安装插件，然后选择 `.xpi`。
-
-安装后在设置页填写 Cloud API 地址与 API Key。打开 PDF，点击工具栏中的“译”。
-
-## 兼容性说明
-
-为避免破坏已有用户配置，本项目公开名称已改为 Zotero-full-translate，但插件 ID、`extensions.zotero.zft.*` 首选项以及内部对象名暂时保持不变。
-
-调试日志默认关闭。如需诊断，可将 `extensions.zotero.zft.debug` 设为 `true`。
-
-## License
-
-MIT License。详见 `LICENSE`。
+manifest 兼容 Zotero `9.0` 至 `10.0.*`。
