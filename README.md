@@ -50,31 +50,6 @@ Zotero Full Translate 将全文 PDF 翻译拆分为两个明确的组件：
 | 多设备 | 一个账户 API Key 可供多台 Zotero 客户端使用 |
 | 管理后台 | 独立 `3006` 端口用于用户、统计与系统状态管理 |
 
-## 系统结构
-
-```mermaid
-flowchart LR
-    Z[Zotero 插件] -->|API Key / 任务 / 译文| U[Cloud :3005]
-    B[浏览器用户中心] -->|HttpOnly Session| U
-    A[管理员浏览器] -->|管理员 Session| M[Cloud :3006]
-
-    U --> F[FastAPI]
-    M --> F
-
-    F --> DB[(SQLite / WAL)]
-    F --> ST[/译文与任务文件 /data/]
-    F --> P[用户级 API 实例池]
-
-    P --> P1[百度实例 A]
-    P --> P2[百度实例 B]
-    P --> P3[阿里云实例]
-    P --> P4[腾讯 / 火山 / OpenAI Compatible ...]
-
-    F --> V[译文版本 / DOI Binding]
-```
-
-> `3005` 与 `3006` 是同一个 Cloud 服务的不同入口。普通用户、Zotero 客户端与管理员权限仍由服务端身份和 scope 判定。
-
 ## 多账号、同一翻译源
 
 Cloud 按“**API 实例**”而不是“厂商类型”管理翻译服务。
@@ -141,6 +116,9 @@ Reader 中的操作按功能分组：
 - 配置任务恢复、自动导入、译文复用与超时参数
 
 Zotero 不保存各翻译厂商的 API Secret；这些凭据只保存在 Cloud 账户侧。
+
+### 测试页
+- http://60.205.210.93:13005/
 
 ## 快速开始
 
