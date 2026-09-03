@@ -23,10 +23,11 @@ async function startup({ id, version, resourceURI, rootURI }, reason) {
     };
     pluginContext._globalThis = pluginContext;
     Services.scriptloader.loadSubScript(rootURI + "chrome/content/main.js", pluginContext);
+    Services.scriptloader.loadSubScript(rootURI + "chrome/content/translation-only.js", pluginContext);
     Zotero.PreferencePanes.register({
         pluginID: id,
         src: rootURI + "chrome/content/preferences.xhtml",
-        scripts: [rootURI + "chrome/content/preferences.js"],
+        scripts: [rootURI + "chrome/content/preferences.js", rootURI + "chrome/content/preferences-release.js"],
         label: "Zotero Full Translate",
         image: rootURI + "chrome/content/icons/icon-48.png"
     });
